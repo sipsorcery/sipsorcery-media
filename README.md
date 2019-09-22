@@ -1,3 +1,5 @@
+[![Build status](https://ci.appveyor.com/api/projects/status/u8nmgpkowce2q4fb/branch/master?svg=true)](https://ci.appveyor.com/project/sipsorcery/sipsorcery-9ql6k/branch/master)
+
 Building
 ---------------------
 
