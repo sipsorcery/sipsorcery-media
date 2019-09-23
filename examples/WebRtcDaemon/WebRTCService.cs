@@ -30,6 +30,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 //-----------------------------------------------------------------------------
 
+using System;
 using System.ServiceProcess;
 using System.Threading.Tasks;
 
@@ -48,7 +49,7 @@ namespace SIPSorcery.Net.WebRtc
 
         protected override void OnStart(string[] args)
         {
-            Task.Run(_daemon.Start);
+            Task.Run((Action)_daemon.Start);
         }
 
         protected override void OnStop()

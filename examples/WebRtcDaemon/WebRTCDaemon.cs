@@ -331,7 +331,7 @@ namespace SIPSorcery.Net.WebRtc
                 InitMediaToWebRtcClients();
 
                 // Start test pattern.
-                Task.Run(SendTestPattern);
+                Task.Run((Action)SendTestPattern);
 
                 if (!String.IsNullOrEmpty(_rawRtpBaseEndPoint))
                 {

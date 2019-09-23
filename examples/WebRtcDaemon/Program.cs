@@ -113,7 +113,7 @@ namespace SIPSorcery.Net.WebRtc
                 }
                 else if ((args != null && args.Length == 1 && args[0].StartsWith("-c")) || System.Environment.UserInteractive == true)
                 {
-                    Task.Run(daemon.Start);
+                    Task.Run((Action)daemon.Start);
 
                     Console.WriteLine("Press q to quit at any time.");
                     while(true)
