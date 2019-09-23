@@ -39,7 +39,6 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using SIPSorceryMedia;
-using SIPSorcery.Sys;
 using log4net;
 
 namespace SIPSorcery.Net.WebRtc

@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>WebRTCDaemon</RootNamespace>
     <AssemblyName>WebRTCDaemon</AssemblyName>
-    <TargetFrameworkVersion>v4.7</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
     <NuGetPackageImportStamp>
@@ -90,17 +90,8 @@
     <Reference Include="NAudio, Version=1.9.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>packages\NAudio.1.9.0\lib\net35\NAudio.dll</HintPath>
     </Reference>
-    <Reference Include="SIPSorcery.Net, Version=2.0.1.37798, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\SIPSorcery.2.0.1\lib\net46\SIPSorcery.Net.dll</HintPath>
-    </Reference>
-    <Reference Include="SIPSorcery.SIP.App, Version=2.0.1.37798, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\SIPSorcery.2.0.1\lib\net46\SIPSorcery.SIP.App.dll</HintPath>
-    </Reference>
-    <Reference Include="SIPSorcery.SIP.Core, Version=2.0.1.37798, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\SIPSorcery.2.0.1\lib\net46\SIPSorcery.SIP.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="SIPSorcery.Sys, Version=2.0.1.37798, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\SIPSorcery.2.0.1\lib\net46\SIPSorcery.Sys.dll</HintPath>
+    <Reference Include="SIPSorcery, Version=3.0.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\SIPSorcery.3.0.1\lib\net472\SIPSorcery.dll</HintPath>
     </Reference>
     <Reference Include="SIPSorceryMedia, Version=2.0.0.33779, Culture=neutral, processorArchitecture=x86" Condition="'$(Platform)' == 'x86'">
       <HintPath>packages\SIPSorceryMedia.2.0.0\lib\net47\SIPSorceryMedia.dll</HintPath>
@@ -114,6 +105,10 @@
     <Reference Include="System.Drawing" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
+    <Reference Include="System.ServiceModel.Primitives, Version=4.5.0.3, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\System.ServiceModel.Primitives.4.5.3\lib\net461\System.ServiceModel.Primitives.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
     <Reference Include="System.ServiceModel.Web" />
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Transactions" />
@@ -130,6 +125,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AppState.cs" />
     <Compile Include="WebRTCDaemon.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
