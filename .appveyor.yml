@@ -1,0 +1,40 @@
+version: '{branch}.{build}'
+skip_tags: true
+image: Visual Studio 2019
+configuration: Release
+platform: x64
+clone_depth: 5
+environment:
+  VCPKG_INSTALL_PATH: 'c:\tools\vcpkg\installed'
+cache:
+- C:\tools\vcpkg\installed -> vcpkg-packages.txt
+install:
+# Powershell block below is to install the c++ dependencies via vcpkg. The pseudo code is:
+# 1. Check whether the vcpkg install directory exists (note that updating the vcpkg-packages.txt file
+#    will cause the appveyor cache rules to invalidate the directory)
+# 2. If the directory is missing:
+#    a. Update the vcpkg source (including port files) and build the vcpkg binary,
+#    b. Install the missing packages.
+- ps: |
+      $env:PACKAGES = Get-Content -Path vcpkg-packages.txt
+      Write-Host "vcpkg list: $env:PACKAGES"
+      if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
+          cd c:\tools\vcpkg
+          $env:GIT_REDIRECT_STDERR = '2>&1' # git is writing non-errors to STDERR when doing git pull. Send to STDOUT instead.
+          git pull origin master
+          .\bootstrap-vcpkg.bat
+          Add-Content "C:\tools\vcpkg\triplets\$env:PLATFORM-windows-static.cmake" "set(VCPKG_BUILD_TYPE release)"
+          .\vcpkg install --triplet $env:PLATFORM-windows-static $env:PACKAGES.split() > $null
+          cd "$env:APPVEYOR_BUILD_FOLDER"
+      }
+      else {
+        Write-Host "required vcpkg packages already installed."
+      }
+      c:\tools\vcpkg\vcpkg integrate install
+build_script:
+- cmd: msbuild SIPSorcery.Media\SIPSorcery.Media.sln /m /v:n /nologo
+after_build:
+#- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
+artifacts:
+#- path: bitcoin-%APPVEYOR_BUILD_VERSION%.zip
+deploy: off
