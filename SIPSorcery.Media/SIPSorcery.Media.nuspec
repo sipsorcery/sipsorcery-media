@@ -20,7 +20,7 @@ v3.0.1: Changed .Net target to v4.5.2.</releaseNotes>
   </metadata>
   <files>
     <file src="nuspec\SIPSorceryMedia.targets" target="build\SIPSorceryMedia.targets" />
-    <file src="nupsec\SIPSorceryMedia.props" target="build\SIPSorceryMedia.props" />
+    <file src="nuspec\SIPSorceryMedia.props" target="build\SIPSorceryMedia.props" />
     <file src="x64\Release\*.dll" target="build\x64" />
     <file src="x86\Release\*.dll" target="build\x86" />
   </files>
