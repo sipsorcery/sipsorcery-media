@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>3.0.0</version>
+    <version>3.0.1</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -11,10 +11,11 @@
     <projectUrl>https://www.sipsorcery.com/</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
     <description>The SIPSorcery package for audio and video capabiltities.</description>
-	<releaseNotes>Tweaked nuget package to remove build warnings due to mismatched platform reference.</releaseNotes>
-    <copyright>Copyright (c) 2019, Aaron Clauson</copyright>
+	<releaseNotes>3.0.0: Tweaked nuget package to remove build warnings due to mismatched platform reference.
+v3.0.1: Changed .Net target to v4.5.2.</releaseNotes>
+    <copyright>Copyright (c) 2019 Aaron Clauson</copyright>
     <language>en-US</language>
-    <tags>WebRtc MediaFoundation</tags>
+    <tags>WebRTC MediaFoundation</tags>
 	<repository type="git" url="https://github.com/sipsorcery/sipsorcery-media" branch="master" />
   </metadata>
   <files>

@@ -3,8 +3,9 @@ skip_tags: true
 image: Visual Studio 2019
 configuration: Release
 platform: x64
-clone_depth: 5
 environment:
+  access_token:
+    secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
   VCPKG_INSTALL_PATH: 'c:\tools\vcpkg\installed'
 cache:
 - C:\tools\vcpkg\installed -> vcpkg-packages.txt
@@ -31,10 +32,31 @@ install:
         Write-Host "required vcpkg packages already installed."
       }
       c:\tools\vcpkg\vcpkg integrate install
-build_script:
-- cmd: msbuild SIPSorcery.Media\SIPSorceryMedia.sln /m /v:n /nologo
+build:
+  project: SIPSorcery.Media\SIPSorceryMedia.sln
+  publish_nuget: true
+  publish_nuget_symbols: true
+  verbosity: quiet
 after_build:
 #- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
 artifacts:
-#- path: bitcoin-%APPVEYOR_BUILD_VERSION%.zip
-deploy: off
+- path: /.*\.nupkg/
+deploy:
+  - provider: NuGet
+    server:                  # remove to push to NuGet.org
+    api_key:
+      secure: MMAD8YSvIgFD6mUWB2tdEGzBNbyfW/9TeB+yN325nQ/nHJMLhv2hBYan1CU1O60z
+    skip_symbols: false
+    symbol_server:           # remove to push symbols to SymbolSource.org
+    artifact: /.*\.nupkg/
+    on:
+      branch: master                # release from master branch only
+      APPVEYOR_REPO_TAG: true       # deploy on tag push only
+      appveyor_repo_tag: true
+  - provider: GitHub
+    artifact: /.*\.nupkg/           # upload all NuGet packages to release assets
+    draft: true
+    prerelease: true
+    on:
+      branch: master                # release from master branch only
+      APPVEYOR_REPO_TAG: true       # deploy on tag push only
