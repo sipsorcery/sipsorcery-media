@@ -3,7 +3,7 @@ skip_tags: true
 image: Visual Studio 2019
 configuration: Release
 platform: 
- - x86
+ - Win32
  - x64
 environment:
   access_token:
@@ -35,6 +35,7 @@ install:
       }
       c:\tools\vcpkg\vcpkg integrate install
 build:
+  parallel: true
   project: SIPSorcery.Media\SIPSorceryMedia.sln
   publish_nuget: true
   publish_nuget_symbols: true
