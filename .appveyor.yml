@@ -2,7 +2,9 @@ version: '{branch}.{build}'
 skip_tags: true
 image: Visual Studio 2019
 configuration: Release
-platform: x64
+platform: 
+ - x86
+ - x64
 environment:
   access_token:
     secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
