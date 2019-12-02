@@ -6,9 +6,10 @@ platform:
  - Win32
  - x64
 environment:
+  APPVEYOR_SAVE_CACHE_ON_ERROR: true
+  VCPKG_INSTALL_PATH: 'c:\tools\vcpkg\installed'
   access_token:
     secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
-  VCPKG_INSTALL_PATH: 'c:\tools\vcpkg\installed'
 cache:
 - C:\tools\vcpkg\installed -> vcpkg-packages.txt
 install:
