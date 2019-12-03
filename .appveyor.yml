@@ -22,7 +22,8 @@ install:
 - ps: |
       $env:PACKAGES = Get-Content -Path vcpkg-packages.txt
       Write-Host "vcpkg list: $env:PACKAGES"
-      if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
+      #if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
+      if(1) {
           cd c:\tools\vcpkg
           $env:GIT_REDIRECT_STDERR = '2>&1' # git is writing non-errors to STDERR when doing git pull. Send to STDOUT instead.
           git pull origin master
