@@ -1,1 +1,1 @@
-openssl libvpx libsrtp 
+openssl libvpx libsrtp ffmpeg 
