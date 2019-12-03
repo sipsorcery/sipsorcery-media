@@ -11,7 +11,7 @@ environment:
   access_token:
     secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
 cache:
-- C:\tools\vcpkg\installed -> vcpkg-packages.txt
+- C:\tools\vcpkg\installed # -> vcpkg-packages.txt
 install:
 # Powershell block below is to install the c++ dependencies via vcpkg. The pseudo code is:
 # 1. Check whether the vcpkg install directory exists (note that updating the vcpkg-packages.txt file
