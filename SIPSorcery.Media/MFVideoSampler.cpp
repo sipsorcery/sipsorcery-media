@@ -482,6 +482,7 @@ namespace SIPSorceryMedia {
 
         videoSample->Release();
 
+        sampleProps->HasVideoSample = true;
         return sampleProps;
       }
     }
