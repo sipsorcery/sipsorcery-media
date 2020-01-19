@@ -34,14 +34,13 @@ using System;
 using System.Collections;
 using System.Configuration.Install;
 using System.Threading.Tasks;
-using SIPSorcery.Sys;
-using log4net;
+using Serilog;
 
 namespace SIPSorcery.Net.WebRtc
 {
     class Program
     {
-        private static ILog logger = AppState.logger;
+        //private static ILog logger = AppState.logger;
 
         static void Main(string[] args)
         {
@@ -49,7 +48,17 @@ namespace SIPSorcery.Net.WebRtc
             {
                 //Windows service has system32 as default working folder, we change the working dir to install dir for file access
                 System.IO.Directory.SetCurrentDirectory(System.AppDomain.CurrentDomain.BaseDirectory);
-                logger.Debug("Setting current directory to " + System.AppDomain.CurrentDomain.BaseDirectory);
+                //logger.Debug("Setting current directory to " + System.AppDomain.CurrentDomain.BaseDirectory);
+
+                var loggerFactory = new Microsoft.Extensions.Logging.LoggerFactory();
+                var loggerConfig = new LoggerConfiguration()
+                    .Enrich.FromLogContext()
+                    .MinimumLevel.Is(Serilog.Events.LogEventLevel.Debug)
+                    .WriteTo.Console()
+                    .CreateLogger();
+                loggerFactory.AddSerilog(loggerConfig);
+                SIPSorcery.Sys.Log.LoggerFactory = loggerFactory;
+                //logger = SIPSorcery.Sys.Log.Logger;
 
                 var daemon = new WebRTCDaemon();
 

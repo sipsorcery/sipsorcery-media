@@ -1,86 +1,113 @@
 //-----------------------------------------------------------------------------
 // Filename: DtlsManaged.h
 //
-// Description: A rudimentary Data Transport Layer Security (DTLS) wrapper around OpenSSL DTLS functions.
+// Description: A rudimentary Data Transport Layer Security (DTLS) wrapper 
+// around OpenSSL DTLS functions.
+//
+// Author(s):
+// Aaron Clauson (aaron@sipsorcery.com)
 //
 // History:
 // ??	          Aaron Clauson	  Created, based on https://gist.github.com/roxlu/9835067.
 // 24 Aug 2019  Aaron Clauson   Added header comment block.
 //
 // License: 
-// This software is licensed under the BSD License http://www.opensource.org/licenses/bsd-license.php
-//
-// Copyright (c) 2019 Aaron Clauson (aaron@sipsorcery.com), SIP Sorcery Pty Ltd, Montreux, Switzerland (www.sipsorcery.com)
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without modification, are permitted provided that 
-// the following conditions are met:
-//
-// Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer. 
-// Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following 
-// disclaimer in the documentation and/or other materials provided with the distribution. Neither the name of SIP Sorcery Pty Ltd 
-// nor the names of its contributors may be used to endorse or promote products derived from this software without specific 
-// prior written permission. 
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, 
-// BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
-// IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, 
-// OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
-// OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
-// OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
-// POSSIBILITY OF SUCH DAMAGE.
+// BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
 //
 // OpenSSL License:
-// This application includes software developed by the OpenSSL Project and cryptographic software written by Eric Young (eay@cryptsoft.com)
+// This application includes software developed by the OpenSSL Project and 
+// cryptographic software written by Eric Young (eay@cryptsoft.com)
 // See the accompanying LICENSE file for conditions.
 //-----------------------------------------------------------------------------
 
 #pragma once
 
 #include "srtp2/srtp.h"
-#include "openssl\srtp.h"
-#include "openssl\err.h"
-#include <msclr\marshal.h>
-#include <msclr\marshal_cppstd.h>
+#include "openssl/srtp.h"
+#include "openssl/err.h"
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
 
 #include <string>
 
+#define SSL_WHERE_INFO(ssl, w, flag, msg) {                \
+    if(w & flag) {                                         \
+      printf("%20.20s", msg);                              \
+      printf(" - %30.30s ", SSL_state_string_long(ssl));   \
+      printf(" - %5.10s ", SSL_state_string(ssl));         \
+      printf("\n");                                        \
+	    }                                                    \
+    } 
+
 namespace SIPSorceryMedia {
 
-	typedef struct {
-		SSL_CTX* ctx;                                                                       /* main ssl context */
-		SSL* ssl;                                                                           /* the SSL* which represents a "connection" */
-		BIO* in_bio;                                                                        /* we use memory read bios */
-		BIO* out_bio;                                                                       /* we use memory write bios */
-		char name[512];
-	} krx;
+  typedef struct {
+    SSL_CTX* ctx;		/* main ssl context */
+    SSL* ssl;       /* the SSL* which represents a "connection" */
+    BIO* in_bio;    /* we use memory read bios */
+    BIO* out_bio;   /* we use memory write bios */
+    char name[512];
+  } krx;
 
-	public ref class DtlsManaged
-	{
-	private:
-		krx * _k { nullptr };
-    property System::String ^ _certFile;
-    property System::String ^ _keyFile;
+  /**
+  * Convenience enum for SSL states defined in ssl.h.
+  */
+  public enum class DtlsState
+  {
+    CONNECT = 0x1000,
+    ACCEPT = 0x2000,
+    MASK = 0x0FFF,
+    //SSL_ST_INIT                     (SSL_ST_CONNECT|SSL_ST_ACCEPT)
+    BEFORE = 0x4000,
+    OK = 0x03,
+    //SSL_ST_RENEGOTIATE              (0x04|SSL_ST_INIT)
+    //SSL_ST_ERR                      (0x05|SSL_ST_INIT)
+  };
 
-		static int VerifyPeer(int ok, X509_STORE_CTX* ctx);
-	public:
+  public ref class DtlsManaged
+  {
+  private:
+    static bool _isOpenSSLInitialised;
 
-    /*
-    * Initialises 
+    krx* _k{ nullptr };
+    property System::String^ _certFile;
+    property System::String^ _keyFile;
+    bool _handshakeComplete = false;
+
+    static int VerifyPeer(int ok, X509_STORE_CTX* ctx);
+
+  public:
+
+    /**
+    * Constructor.
+    * @param[in] certFile: path to the certificate file, must be in PEM format.
+    * @param[in] keyFile: path to the private key file, must be in PEM format.
     */
-		DtlsManaged(System::String ^ certFile, System::String ^ _keyFile);
-		~DtlsManaged();
-		int Init();
-		//int DoHandshake(cli::array<System::Byte>^ buffer, int bufferLength); 
-		int Write(cli::array<System::Byte>^ buffer, int bufferLength);
-		int Read(cli::array<System::Byte>^ buffer, int bufferLength);
-		bool IsHandshakeComplete();
-		int GetState();
+    DtlsManaged(System::String^ certFile, System::String^ _keyFile);
 
-		property SSL* Ssl {
-			SSL* get() {
-				return _k->ssl;
-			}
-		}
-	};
+    /**
+    * Destructor. Cleans up the SSL context and associated structures.
+    */
+    ~DtlsManaged();
+
+    /**
+    * Initialises the SSL context, API and other bits and pieces required to 
+    * accept DTLS clients or connect to a DTLS server.
+    */
+    int Init();
+
+    //int DoHandshake(cli::array<System::Byte>^ buffer, int bufferLength); 
+    int Write(cli::array<System::Byte>^ buffer, int bufferLength);
+    int Read(cli::array<System::Byte>^ buffer, int bufferLength);
+    bool IsHandshakeComplete();
+    int GetState();
+
+    void Shutdown();
+
+    property SSL* Ssl {
+      SSL* get() {
+        return _k->ssl;
+      }
+    }
+  };
 }
