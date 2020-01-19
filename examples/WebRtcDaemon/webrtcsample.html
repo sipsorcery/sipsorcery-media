@@ -20,7 +20,6 @@
 
             console.log("Web socket URL " + url);
 
-            var ws;
             var pc;
 
             ws = new WebSocket(url, []);
@@ -72,7 +71,7 @@
     <br /><br />
 
     <div>
-        <button type="button" class="btn btn-success" onclick="wsConnect('wss://localhost:8081/max', document.querySelector('#maxVideo'));">Play Max</button>
+        <button type="button" class="btn btn-success" onclick="wsConnect('wss://localhost:8082/max', document.querySelector('#maxVideo'));">Play Max</button>
     </div>
 
     <br /><br />
@@ -81,5 +80,5 @@
 
     <br /><br />
 
-    <button type="button" class="btn btn-success" onclick="wsConnect('wss://localhost:8081/testpattern', document.querySelector('#testPatternVideo'));">Play Test Pattern</button>
+    <button type="button" class="btn btn-success" onclick="wsConnect('wss://localhost:8082/testpattern', document.querySelector('#testPatternVideo'));">Play Test Pattern</button>
 </body>

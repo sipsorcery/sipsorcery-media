@@ -158,9 +158,8 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using SIPSorceryMedia;
-using SIPSorcery.Sys;
-using log4net;
 using NAudio.Codecs;
 using WebSocketSharp;
 using WebSocketSharp.Server;
@@ -218,7 +217,8 @@ namespace SIPSorcery.Net.WebRtc
 
     public class WebRTCDaemon
     {
-        private static ILog logger = AppState.logger;
+        //private static ILog logger = AppState.logger;
+        private static Microsoft.Extensions.Logging.ILogger logger = SIPSorcery.Sys.Log.Logger;
 
         private const float TEXT_SIZE_PERCENTAGE = 0.035f;       // height of text as a percentage of the total image height
         private const float TEXT_OUTLINE_REL_THICKNESS = 0.02f; // Black text outline thickness is set as a percentage of text height in pixels
@@ -228,8 +228,8 @@ namespace SIPSorcery.Net.WebRtc
         private const int VP8_TIMESTAMP_SPACING = 3000;
         private const int VP8_PAYLOAD_TYPE_ID = 100;
         private const int RTCP_SR_PERIOD_SECONDS = 3;
-        private const int RAW_RTP_START_PORT_RANGE = 48000;
-        private const int RAW_RTP_END_PORT_RANGE = 48200;
+        //private const int RAW_RTP_START_PORT_RANGE = 48000;
+        //private const int RAW_RTP_END_PORT_RANGE = 48200;
         private const int DEFAULT_WEB_SOCKET_PORT = 8081;
 
         // Application configuration settings.
@@ -263,12 +263,12 @@ namespace SIPSorcery.Net.WebRtc
             {
                 Console.WriteLine("This application includes software developed by the OpenSSL Project and cryptographic software written by Eric Young (eay@cryptsoft.com).");
 
-                logger.Debug("WebRTCDaemon starting.");
+                logger.LogDebug("WebRTCDaemon starting.");
 
                 var wssCertificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(_webSocketCertificatePath, _webSocketCertificatePassword);
-                logger.Debug("Web Socket Server Certificate: " + wssCertificate.Subject + ", have key " + wssCertificate.HasPrivateKey + ", Expires " + wssCertificate.GetExpirationDateString() + ".");
-                logger.Debug($"DTLS certificate thumbprint {_dtlsCertificateThumbprint}.");
-                logger.Debug($"Web socket port {_webSocketPort}.");
+                logger.LogDebug("Web Socket Server Certificate: " + wssCertificate.Subject + ", have key " + wssCertificate.HasPrivateKey + ", Expires " + wssCertificate.GetExpirationDateString() + ".");
+                logger.LogDebug($"DTLS certificate thumbprint {_dtlsCertificateThumbprint}.");
+                logger.LogDebug($"Web socket port {_webSocketPort}.");
 
                 if (!File.Exists(_mediaFilePath))
                 {
@@ -285,7 +285,7 @@ namespace SIPSorcery.Net.WebRtc
                 int webSocketPort = (!String.IsNullOrEmpty(_webSocketPort)) ? Int32.Parse(_webSocketPort) : DEFAULT_WEB_SOCKET_PORT;
                 _webSocketServer = new WebSocketServer(webSocketPort, true);
                 _webSocketServer.SslConfiguration = new WebSocketSharp.Net.ServerSslConfiguration(wssCertificate, false, System.Security.Authentication.SslProtocols.Default, false);
-                _webSocketServer.Log.Level = LogLevel.Debug;
+                //_webSocketServer.Log.Level = LogLevel.Debug;
 
                 // Standard encrypted WebRtc stream.
                 _webSocketServer.AddWebSocketService<SDPExchange>("/max", () =>
@@ -341,13 +341,13 @@ namespace SIPSorcery.Net.WebRtc
 
                         if (rawRtpBaseEndPoint != null)
                         {
-                            logger.Info($"Raw RTP send starting, base end point {rawRtpBaseEndPoint}.");
+                            logger.LogInformation($"Raw RTP send starting, base end point {rawRtpBaseEndPoint}.");
                             SendSamplesAsRtp(rawRtpBaseEndPoint);
                         }
                     }
                     catch (Exception rawRtpExcp)
                     {
-                        logger.Warn("Exception attempting to start raw RTP. " + rawRtpExcp.Message);
+                        logger.LogWarning("Exception attempting to start raw RTP. " + rawRtpExcp.Message);
                     }
                 }
 
@@ -356,7 +356,7 @@ namespace SIPSorcery.Net.WebRtc
             }
             catch (Exception excp)
             {
-                logger.Error("Exception WebRTCDaemon.Start. " + excp);
+                logger.LogError("Exception WebRTCDaemon.Start. " + excp);
             }
         }
 
@@ -364,7 +364,7 @@ namespace SIPSorcery.Net.WebRtc
         {
             try
             {
-                logger.Debug("Stopping WebRTCDaemon.");
+                logger.LogDebug("Stopping WebRTCDaemon.");
 
                 _exit = true;
 
@@ -373,12 +373,12 @@ namespace SIPSorcery.Net.WebRtc
 
                 foreach (var session in _webRtcSessions.Values)
                 {
-                    session.Peer.Close();
+                    session.Close();
                 }
             }
             catch (Exception excp)
             {
-                logger.Error("Exception WebRTCDaemon.Stop. " + excp);
+                logger.LogError("Exception WebRTCDaemon.Stop. " + excp);
             }
         }
 
@@ -394,7 +394,7 @@ namespace SIPSorcery.Net.WebRtc
                         _vpxEncoder.Dispose();
                     }
 
-                    logger.Info($"Initialising VPXEncoder with width {width}, height {height} and stride {stride}.");
+                    logger.LogInformation($"Initialising VPXEncoder with width {width}, height {height} and stride {stride}.");
 
                     _vpxEncoder = new VPXEncoder();
                     _vpxEncoder.InitEncoder(width, height, stride);
@@ -402,7 +402,7 @@ namespace SIPSorcery.Net.WebRtc
             }
             catch (Exception excp)
             {
-                logger.Warn("Exception MfSampleGrabber_OnVideoResolutionChangedEvent. " + excp.Message);
+                logger.LogWarning("Exception MfSampleGrabber_OnVideoResolutionChangedEvent. " + excp.Message);
             }
         }
 
@@ -414,7 +414,7 @@ namespace SIPSorcery.Net.WebRtc
                 {
                     if (_vpxEncoder == null)
                     {
-                        logger.Warn("Video sample cannot be processed as the VPX encoder has not yet received the frame size.");
+                        logger.LogWarning("Video sample cannot be processed as the VPX encoder has not yet received the frame size.");
                     }
                     else
                     {
@@ -428,7 +428,7 @@ namespace SIPSorcery.Net.WebRtc
 
                                 if (encodeResult != 0)
                                 {
-                                    logger.Warn("VPX encode of video sample failed.");
+                                    logger.LogWarning("VPX encode of video sample failed.");
                                 }
                             }
                         }
@@ -463,7 +463,7 @@ namespace SIPSorcery.Net.WebRtc
             }
             catch (Exception excp)
             {
-                logger.Warn("Exception MfSampleGrabber_OnProcessSampleEvent. " + excp.Message);
+                logger.LogWarning("Exception MfSampleGrabber_OnProcessSampleEvent. " + excp.Message);
             }
         }
 
@@ -474,9 +474,9 @@ namespace SIPSorcery.Net.WebRtc
 
         private void WebRtcStartCall(WebSocketSharp.Net.WebSockets.WebSocketContext context, string webSocketID, IPAddress defaultIPAddress, bool isEncryptionDisabled, MediaSourceEnum mediaSource)
         {
-            logger.Debug($"New WebRTC client added for web socket connection {webSocketID} and local IP address {defaultIPAddress}, encryption disabled {isEncryptionDisabled}.");
+            logger.LogDebug($"New WebRTC client added for web socket connection {webSocketID} and local IP address {defaultIPAddress}, encryption disabled {isEncryptionDisabled}.");
 
-            var mediaTypes = new List<RtpMediaTypesEnum> { RtpMediaTypesEnum.Video, RtpMediaTypesEnum.Audio };
+            //var mediaTypes = new List<RtpMediaTypesEnum> { RtpMediaTypesEnum.Video, RtpMediaTypesEnum.Audio };
 
             _mfSampleGrabber.Start();  // Does nothing if media session is not paused.
 
@@ -484,29 +484,29 @@ namespace SIPSorcery.Net.WebRtc
             {
                 if (!_webRtcSessions.Any(x => x.Key == webSocketID))
                 {
-                    var webRtcSession = new WebRtcSession(_dtlsCertificatePath, _dtlsKeyPath, webSocketID, isEncryptionDisabled, mediaSource);
+                    var webRtcSession = new WebRtcSession(_dtlsCertificatePath, _dtlsKeyPath, webSocketID, isEncryptionDisabled, new List<IPAddress>{ IPAddress.Loopback});
 
                     string dtlsThumbrpint = (isEncryptionDisabled == false) ? _dtlsCertificateThumbprint : null;
 
                     if (_webRtcSessions.TryAdd(webSocketID, webRtcSession))
                     {
-                        webRtcSession.Peer.OnSdpOfferReady += (sdp) => { logger.Debug("Offer SDP: " + sdp); context.WebSocket.Send(sdp); };
-                        webRtcSession.Peer.OnMediaPacket += webRtcSession.MediaPacketReceived;
-                        webRtcSession.Peer.Initialise(dtlsThumbrpint, null, mediaTypes, defaultIPAddress, isEncryptionDisabled);
-                        webRtcSession.Peer.OnClose += () => { PeerClosed(webSocketID); };
+                        webRtcSession.OnSdpOfferReady += (sdp) => { logger.LogDebug("Offer SDP: " + sdp); context.WebSocket.Send(sdp); };
+                        //webRtcSession.OnMediaPacket += webRtcSession.MediaPacketReceived;
+                        webRtcSession.Initialise(dtlsThumbrpint, null, isEncryptionDisabled);
+                        webRtcSession.OnClose += (reason) => { logger.LogDebug($"WebRTCSession was closed with reason {reason}."); PeerClosed(webSocketID); };
 
-                        if (isEncryptionDisabled == false)
-                        {
-                            webRtcSession.Peer.OnDtlsPacket += webRtcSession.DtlsPacketReceived;
-                        }
-                        else
-                        {
-                            webRtcSession.Peer.OnIceConnected += webRtcSession.InitEncryptionDisabledSession;
-                        }
+                        //if (isEncryptionDisabled == false)
+                        //{
+                        //    webRtcSession.OnDtlsPacket += webRtcSession.DtlsPacketReceived;
+                        //}
+                        //else
+                        //{
+                        //    webRtcSession.OnIceConnected += webRtcSession.InitEncryptionDisabledSession;
+                        //}
                     }
                     else
                     {
-                        logger.Error("Failed to add new WebRTC client.");
+                        logger.LogError("Failed to add new WebRTC client.");
                     }
                 }
             }
@@ -516,18 +516,18 @@ namespace SIPSorcery.Net.WebRtc
         {
             try
             {
-                logger.Debug("WebRTC session for closed for call ID " + callID + ".");
+                logger.LogDebug("WebRTC session for closed for call ID " + callID + ".");
 
                 WebRtcSession closedSession = null;
 
                 if (!_webRtcSessions.TryRemove(callID, out closedSession))
                 {
-                    logger.Error("Failed to remove closed WebRTC session from dictionary.");
+                    logger.LogError("Failed to remove closed WebRTC session from dictionary.");
                 }
             }
             catch (Exception excp)
             {
-                logger.Error("Exception WebRTCDaemon.PeerClosed. " + excp);
+                logger.LogError("Exception WebRTCDaemon.PeerClosed. " + excp);
             }
         }
 
@@ -535,33 +535,33 @@ namespace SIPSorcery.Net.WebRtc
         {
             try
             {
-                logger.Debug("Answer SDP: " + sdpAnswer);
+                logger.LogDebug("Answer SDP: " + sdpAnswer);
 
                 var answerSDP = SDP.ParseSDPDescription(sdpAnswer);
 
-                var peer = _webRtcSessions.Where(x => x.Key == webSocketID).Select(x => x.Value.Peer).SingleOrDefault();
+                var session = _webRtcSessions.Where(x => x.Key == webSocketID).Select(x => x.Value).SingleOrDefault();
 
-                if (peer == null)
+                if (session == null)
                 {
-                    logger.Warn("No WebRTC client entry exists for web socket ID " + webSocketID + ", ignoring.");
+                    logger.LogWarning("No WebRTC client entry exists for web socket ID " + webSocketID + ", ignoring.");
                 }
                 else
                 {
-                    logger.Debug("New WebRTC client SDP answer for web socket ID " + webSocketID + ".");
+                    logger.LogDebug("New WebRTC client SDP answer for web socket ID " + webSocketID + ".");
 
-                    peer.SdpSessionID = answerSDP.SessionId;
-                    peer.RemoteIceUser = answerSDP.IceUfrag;
-                    peer.RemoteIcePassword = answerSDP.IcePwd;
+                    session.SdpSessionID = answerSDP.SessionId;
+                    session.RemoteIceUser = answerSDP.IceUfrag;
+                    session.RemoteIcePassword = answerSDP.IcePwd;
 
                     if (answerSDP.IceCandidates == null)
                     {
-                        logger.Warn("SDP answer did not contain any ICE candidates.");
+                        logger.LogWarning("SDP answer did not contain any ICE candidates.");
                     }
                     else
                     {
                         foreach (var iceCandidate in answerSDP.IceCandidates)
                         {
-                            peer.AppendRemoteIceCandidate(iceCandidate);
+                            session.AppendRemoteIceCandidate(iceCandidate);
                         }
                     }
                 }
@@ -570,7 +570,7 @@ namespace SIPSorcery.Net.WebRtc
             }
             catch (Exception excp)
             {
-                logger.Error("Exception SDPExchangeReceiver_SDPAnswerReceived. " + excp.Message);
+                logger.LogError("Exception SDPExchangeReceiver_SDPAnswerReceived. " + excp.Message);
             }
         }
 
@@ -587,7 +587,7 @@ namespace SIPSorcery.Net.WebRtc
                 {
                     if (_mfSampleGrabber.Paused == false)
                     {
-                        logger.Info("No active clients, pausing media sampling.");
+                        logger.LogInformation("No active clients, pausing media sampling.");
                         _mfSampleGrabber.Pause();
                     }
                 }
@@ -595,9 +595,9 @@ namespace SIPSorcery.Net.WebRtc
                 {
                     lock (_webRtcSessions)
                     {
-                        foreach (var session in _webRtcSessions.Where(x => (x.Value.Peer.IsDtlsNegotiationComplete == true || x.Value.IsEncryptionDisabled == true) &&
-                           x.Value.Peer.LocalIceCandidates.Any(y => y.RemoteRtpEndPoint != null) && x.Value.MediaSource == MediaSourceEnum.Max &&
-                           x.Value.Peer.IsClosed == false))
+                        foreach (var session in _webRtcSessions.Where(x => (x.Value.IsDtlsNegotiationComplete == true || x.Value.IsEncryptionDisabled == true) &&
+                           x.Value.IsConnected && x.Value.MediaSource == MediaSourceEnum.Max &&
+                           x.Value.IsClosed == false))
                         {
                             try
                             {
@@ -605,34 +605,34 @@ namespace SIPSorcery.Net.WebRtc
                             }
                             catch (Exception sendExcp)
                             {
-                                logger.Warn("Exception OnMediaSampleReady.SendMedia. " + sendExcp.Message);
-                                session.Value.Peer.Close();
+                                logger.LogWarning("Exception OnMediaSampleReady.SendMedia. " + sendExcp.Message);
+                                session.Value.Close();
                             }
                         }
                     }
 
                     // Deliver periodic RTCP sender reports. This helps the receiver to sync the audio and video stream timestamps.
-                    // If there are gaps in the media, silence supression etc. then the sender repors shouldn't be triggered from the media samples.
+                    // If there are gaps in the media, silence supression etc. then the sender reports shouldn't be triggered from the media samples.
                     // In this case the samples are from an mp4 file which provides a constant uninterrupted stream.
-                    if (DateTime.Now.Subtract(_lastRtcpSenderReportSentAt).TotalSeconds >= RTCP_SR_PERIOD_SECONDS)
-                    {
-                        foreach (var session in _webRtcSessions.Where(x => (x.Value.Peer.IsDtlsNegotiationComplete == true || x.Value.IsEncryptionDisabled == true) &&
-                          x.Value.Peer.LocalIceCandidates.Any(y => y.RemoteRtpEndPoint != null) && x.Value.MediaSource == MediaSourceEnum.Max &&
-                          x.Value.Peer.IsClosed == false))
-                        {
-                            try
-                            {
-                                session.Value.SendRtcpSenderReports(_mulawTimestamp, _vp8Timestamp);
-                            }
-                            catch (Exception sendExcp)
-                            {
-                                logger.Warn("Exception OnMediaSampleReady.SendRtcpSenderReports. " + sendExcp.Message);
-                                session.Value.Peer.Close();
-                            }
-                        }
+                    //if (DateTime.Now.Subtract(_lastRtcpSenderReportSentAt).TotalSeconds >= RTCP_SR_PERIOD_SECONDS)
+                    //{
+                    //    foreach (var session in _webRtcSessions.Where(x => (x.Value.Peer.IsDtlsNegotiationComplete == true || x.Value.IsEncryptionDisabled == true) &&
+                    //      x.Value.Peer.LocalIceCandidates.Any(y => y.RemoteRtpEndPoint != null) && x.Value.MediaSource == MediaSourceEnum.Max &&
+                    //      x.Value.Peer.IsClosed == false))
+                    //    {
+                    //        try
+                    //        {
+                    //            session.Value.SendRtcpSenderReports(_mulawTimestamp, _vp8Timestamp);
+                    //        }
+                    //        catch (Exception sendExcp)
+                    //        {
+                    //            logger.LogWarning("Exception OnMediaSampleReady.SendRtcpSenderReports. " + sendExcp.Message);
+                    //            session.Value.Peer.Close();
+                    //        }
+                    //    }
 
-                        _lastRtcpSenderReportSentAt = DateTime.Now;
-                    }
+                    //    _lastRtcpSenderReportSentAt = DateTime.Now;
+                    //}
                 }
             };
         }
@@ -658,54 +658,59 @@ namespace SIPSorcery.Net.WebRtc
         {
             try
             {
-                Socket videoSrcRtpSocket = null;
-                Socket videoSrcControlSocket = null;
-                Socket audioSrcRtpSocket = null;
-                Socket audioSrcControlSocket = null;
+                //Socket videoSrcRtpSocket = null;
+                //Socket videoSrcControlSocket = null;
+                //Socket audioSrcRtpSocket = null;
+                //Socket audioSrcControlSocket = null;
 
                 // WebRtc multiplexes all the RTP and RTCP sessions onto a single UDP connection.
                 // The approach needed for ffplay is the original way where each media type has it's own UDP connection and the RTCP 
                 // also require a separate UDP connection on RTP port + 1.
-                IPAddress localIPAddress = IPAddress.Any;
-                IPEndPoint audioRtpEP = dstBaseEndPoint;
-                IPEndPoint audioRtcpEP = new IPEndPoint(dstBaseEndPoint.Address, dstBaseEndPoint.Port + 1);
-                IPEndPoint videoRtpEP = new IPEndPoint(dstBaseEndPoint.Address, dstBaseEndPoint.Port + 2);
-                IPEndPoint videoRtcpEP = new IPEndPoint(dstBaseEndPoint.Address, dstBaseEndPoint.Port + 3);
+                //IPAddress localIPAddress = IPAddress.Any;
+                //IPEndPoint audioRtpEP = dstBaseEndPoint;
+                //IPEndPoint audioRtcpEP = new IPEndPoint(dstBaseEndPoint.Address, dstBaseEndPoint.Port + 1);
+                //IPEndPoint videoRtpEP = new IPEndPoint(dstBaseEndPoint.Address, dstBaseEndPoint.Port + 2);
+                //IPEndPoint videoRtcpEP = new IPEndPoint(dstBaseEndPoint.Address, dstBaseEndPoint.Port + 3);
 
-                RTPSession audioRtpSession = new RTPSession((int)RTPPayloadTypesEnum.PCMU, null, null);
-                RTPSession videoRtpSession = new RTPSession(VP8_PAYLOAD_TYPE_ID, null, null);
+                RTPSession audioRtpSession = new RTPSession((int)SDPMediaFormatsEnum.PCMU, AddressFamily.InterNetwork, false, null);
+                RTPSession videoRtpSession = new RTPSession(VP8_PAYLOAD_TYPE_ID, AddressFamily.InterNetwork, false, null);
+
+                audioRtpSession.DestinationEndPoint = dstBaseEndPoint;
+                videoRtpSession.DestinationEndPoint = new IPEndPoint(dstBaseEndPoint.Address, dstBaseEndPoint.Port + 2);
 
                 DateTime lastRtcpSenderReportSentAt = DateTime.Now;
 
-                NetServices.CreateRtpSocket(localIPAddress, RAW_RTP_START_PORT_RANGE, RAW_RTP_END_PORT_RANGE, true, out audioSrcRtpSocket, out audioSrcControlSocket);
-                NetServices.CreateRtpSocket(localIPAddress, ((IPEndPoint)audioSrcRtpSocket.LocalEndPoint).Port, RAW_RTP_END_PORT_RANGE, true, out videoSrcRtpSocket, out videoSrcControlSocket);
+                //NetServices.CreateRtpSocket(localIPAddress, RAW_RTP_START_PORT_RANGE, RAW_RTP_END_PORT_RANGE, true, out audioSrcRtpSocket, out audioSrcControlSocket);
+                //NetServices.CreateRtpSocket(localIPAddress, ((IPEndPoint)audioSrcRtpSocket.LocalEndPoint).Port, RAW_RTP_END_PORT_RANGE, true, out videoSrcRtpSocket, out videoSrcControlSocket);
 
                 OnMediaSampleReady += (mediaType, timestamp, sample) =>
                 {
                     if (mediaType == MediaSampleTypeEnum.VP8)
                     {
-                        videoRtpSession.SendVp8Frame(videoSrcRtpSocket, videoRtpEP, timestamp, sample);
+                        //videoRtpSession.SendVp8Frame(videoSrcRtpSocket, videoRtpEP, timestamp, sample);
+                        videoRtpSession.SendVp8Frame(timestamp, sample);
                     }
                     else
                     {
-                        audioRtpSession.SendAudioFrame(audioSrcRtpSocket, audioRtpEP, timestamp, sample);
+                        //audioRtpSession.SendAudioFrame(audioSrcRtpSocket, audioRtpEP, timestamp, sample);
+                        audioRtpSession.SendAudioFrame(timestamp, sample);
                     }
 
                     // Deliver periodic RTCP sender reports. This helps the receiver to sync the audio and video stream timestamps.
                     // If there are gaps in the media, silence supression etc. then the sender repors shouldn't be triggered from the media samples.
                     // In this case the samples are from an mp4 file which provides a constant uninterrupted stream.
-                    if (DateTime.Now.Subtract(lastRtcpSenderReportSentAt).TotalSeconds >= RTCP_SR_PERIOD_SECONDS)
-                    {
-                        videoRtpSession.SendRtcpSenderReport(videoSrcControlSocket, videoRtcpEP, _vp8Timestamp);
-                        audioRtpSession.SendRtcpSenderReport(audioSrcControlSocket, audioRtcpEP, _mulawTimestamp);
+                    //if (DateTime.Now.Subtract(lastRtcpSenderReportSentAt).TotalSeconds >= RTCP_SR_PERIOD_SECONDS)
+                    //{
+                    //    videoRtpSession.SendRtcpSenderReport(videoSrcControlSocket, videoRtcpEP, _vp8Timestamp);
+                    //    audioRtpSession.SendRtcpSenderReport(audioSrcControlSocket, audioRtcpEP, _mulawTimestamp);
 
-                        lastRtcpSenderReportSentAt = DateTime.Now;
-                    }
+                    //    lastRtcpSenderReportSentAt = DateTime.Now;
+                    //}
                 };
             }
             catch (Exception excp)
             {
-                logger.Error("Exception SendSamplesAsRtp. " + excp);
+                logger.LogError("Exception SendSamplesAsRtp. " + excp);
             }
         }
 
@@ -741,9 +746,8 @@ namespace SIPSorcery.Net.WebRtc
 
                     while (!_exit)
                     {
-                        if (_webRtcSessions.Any(x => (x.Value.Peer.IsDtlsNegotiationComplete == true || x.Value.IsEncryptionDisabled == true) &&
-                             x.Value.Peer.LocalIceCandidates.Any(y => y.RemoteRtpEndPoint != null && x.Value.MediaSource == MediaSourceEnum.TestPattern &&
-                             x.Value.Peer.IsClosed == false)))
+                        if (_webRtcSessions.Any(x => (x.Value.IsDtlsNegotiationComplete == true || x.Value.IsEncryptionDisabled == true) &&
+                             x.Value.IsConnected && x.Value.MediaSource == MediaSourceEnum.TestPattern))
                         {
                             var stampedTestPattern = testPattern.Clone() as System.Drawing.Image;
                             AddTimeStampAndLocation(stampedTestPattern, DateTime.UtcNow.ToString("dd MMM yyyy HH:mm:ss:fff"), "Test Pattern");
@@ -760,7 +764,7 @@ namespace SIPSorcery.Net.WebRtc
 
                                     if (encodeResult != 0)
                                     {
-                                        logger.Warn("VPX encode of video sample failed.");
+                                        logger.LogWarning("VPX encode of video sample failed.");
                                         continue;
                                     }
                                 }
@@ -771,8 +775,8 @@ namespace SIPSorcery.Net.WebRtc
 
                             lock (_webRtcSessions)
                             {
-                                foreach (var session in _webRtcSessions.Where(x => (x.Value.Peer.IsDtlsNegotiationComplete == true || x.Value.IsEncryptionDisabled == true) &&
-                                        x.Value.Peer.LocalIceCandidates.Any(y => y.RemoteRtpEndPoint != null) && x.Value.MediaSource == MediaSourceEnum.TestPattern))
+                                foreach (var session in _webRtcSessions.Where(x => (x.Value.IsDtlsNegotiationComplete == true || x.Value.IsEncryptionDisabled == true) &&
+                                        x.Value.IsConnected && x.Value.MediaSource == MediaSourceEnum.TestPattern))
                                 {
                                     try
                                     {
@@ -780,8 +784,8 @@ namespace SIPSorcery.Net.WebRtc
                                     }
                                     catch (Exception sendExcp)
                                     {
-                                        logger.Warn("Exception SendTestPattern.SendMedia. " + sendExcp.Message);
-                                        session.Value.Peer.Close();
+                                        logger.LogWarning("Exception SendTestPattern.SendMedia. " + sendExcp.Message);
+                                        session.Value.Close();
                                     }
                                 }
                             }
@@ -798,7 +802,7 @@ namespace SIPSorcery.Net.WebRtc
             }
             catch (Exception excp)
             {
-                logger.Error("Exception SendTestPattern. " + excp);
+                logger.LogError("Exception SendTestPattern. " + excp);
             }
         }
 
