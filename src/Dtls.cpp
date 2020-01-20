@@ -1,3 +1,12 @@
+//-----------------------------------------------------------------------------
+// Filename: Dtls.cpp
+//
+// Description: See header.
+//
+// License: 
+// BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
+//-----------------------------------------------------------------------------
+
 #include "Dtls.h"
 
 namespace SIPSorceryMedia {
@@ -127,7 +136,7 @@ namespace SIPSorceryMedia {
       return HANDSHAKE_ERROR_STATUS;
     }
 
-    _k->bio = BIO_new_dgram(rtpSocket, BIO_NOCLOSE);
+    _k->bio = BIO_new_dgram((int)rtpSocket, BIO_NOCLOSE);
 
     SSL_set_bio(_k->ssl, _k->bio, _k->bio);
     SSL_set_info_callback(_k->ssl, krx_ssl_info_callback);

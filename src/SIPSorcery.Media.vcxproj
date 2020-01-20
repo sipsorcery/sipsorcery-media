@@ -119,7 +119,7 @@
     <ClInclude Include="MFVideoSampler.h" />
     <ClInclude Include="Srtp.h" />
     <ClInclude Include="VideoSubTypes.h" />
-    <ClInclude Include="VPXEncoder.h" />
+    <ClInclude Include="VpxEncoder.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
@@ -128,7 +128,7 @@
     <ClCompile Include="MFSampleGrabber.cpp" />
     <ClCompile Include="MFVideoSampler.cpp" />
     <ClCompile Include="Srtp.cpp" />
-    <ClCompile Include="VPXEncoder.cpp" />
+    <ClCompile Include="VpxEncoder.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

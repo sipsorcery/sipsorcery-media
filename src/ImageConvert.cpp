@@ -1,3 +1,12 @@
+//-----------------------------------------------------------------------------
+// Filename: ImageConvert.cpp
+//
+// Description: See header.
+//
+// License: 
+// BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
+//-----------------------------------------------------------------------------
+
 #include "ImageConvert.h"
 
 namespace SIPSorceryMedia {
@@ -9,7 +18,6 @@ namespace SIPSorceryMedia {
 	{
 		sws_freeContext(_swsContextRGBToYUV);
 		sws_freeContext(_swsContextYUVToRGB);
-		//sws_freeContext(_swsContext);
 	}
 
 	int ImageConvert::ConvertRGBtoYUV(unsigned char* bmp, VideoSubTypesEnum rgbInputFormat, int width, int height, int stride, VideoSubTypesEnum yuvOutputFormat, /* out */ array<Byte> ^% buffer)
@@ -26,6 +34,7 @@ namespace SIPSorceryMedia {
 
 		AVFrame* dstFrame = av_frame_alloc();
 		int num_bytes = avpicture_get_size(yuvPixelFormat, width, height);
+		
 		int bufferSize = num_bytes*sizeof(uint8_t);
 		uint8_t* dstFrameBuffer = (uint8_t *)av_malloc(bufferSize);
 		avpicture_fill((AVPicture*)dstFrame, dstFrameBuffer, yuvPixelFormat, width, height);

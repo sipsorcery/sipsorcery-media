@@ -1,10 +1,26 @@
+//-----------------------------------------------------------------------------
+// Filename: VideoSubTypes.h
+//
+// Description: Helper to map between Windows Media Foundation and ffmpeg
+// pixel formats.
+//
+// Author(s):
+// Aaron Clauson (aaron@sipsorcery.com)
+//
+// History:
+// ??	          Aaron Clauson	  Created.
+//
+// License: 
+// BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
+//-----------------------------------------------------------------------------
+
 #pragma once
 
 #include <mfapi.h>
 
 extern "C"
 {
-	#include "libswscale\swscale.h"
+	#include "libswscale/swscale.h"
 }
 
 namespace SIPSorceryMedia {
