@@ -1,12 +1,21 @@
-#include "VPXEncoder.h"
+//-----------------------------------------------------------------------------
+// Filename: VpxEncoder.cpp
+//
+// Description: See header.
+//
+// License: 
+// BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
+//-----------------------------------------------------------------------------
+
+#include "VpxEncoder.h"
 
 namespace SIPSorceryMedia {
 
-	VPXEncoder::VPXEncoder() 
+	VpxEncoder::VpxEncoder() 
 		: _vpxCodec(0), _rawImage(0), _vpxDecoder(0)
 	{ }
 
-	VPXEncoder::~VPXEncoder()
+	VpxEncoder::~VpxEncoder()
 	{
 		if (_rawImage != NULL) {
 			vpx_img_free(_rawImage);
@@ -21,7 +30,7 @@ namespace SIPSorceryMedia {
 		}
 	}
 
-	int VPXEncoder::InitEncoder(unsigned int width, unsigned int height, unsigned int stride)
+	int VpxEncoder::InitEncoder(unsigned int width, unsigned int height, unsigned int stride)
 	{
 		_vpxCodec = new vpx_codec_ctx_t();
 		_rawImage = new vpx_image_t();
@@ -62,9 +71,11 @@ namespace SIPSorceryMedia {
 				return -1;
 			}
 		}
+
+		return 0;
 	}
 
-	int VPXEncoder::InitDecoder()
+	int VpxEncoder::InitDecoder()
 	{
 		_vpxDecoder = new vpx_codec_ctx_t();
 
@@ -73,9 +84,11 @@ namespace SIPSorceryMedia {
 			printf("Failed to initialize libvpx decoder.\n");
 			return -1;
 		}
+
+		return 0;
 	}
 
-	int VPXEncoder::Encode(unsigned char * i420, int i420Length, int sampleCount, array<Byte> ^% buffer)
+	int VpxEncoder::Encode(unsigned char * i420, int i420Length, int sampleCount, array<Byte> ^% buffer)
 	{
 		vpx_image_t* const img = vpx_img_wrap(_rawImage, VPX_IMG_FMT_I420, _width, _height, 1, i420);
 
@@ -94,8 +107,8 @@ namespace SIPSorceryMedia {
 				case VPX_CODEC_CX_FRAME_PKT:
 					//vpkt = const_cast<vpx_codec_cx_pkt_t **>(&pkt);
 					//printf("%s %i\n", (pkt->data.frame.flags & VPX_FRAME_IS_KEY) ? "K" : ".", pkt->data.frame.sz);
-					buffer = gcnew array<Byte>(pkt->data.raw.sz);
-					Marshal::Copy((IntPtr)pkt->data.raw.buf, buffer, 0, pkt->data.raw.sz);
+					buffer = gcnew array<Byte>((int)pkt->data.raw.sz);
+					Marshal::Copy((IntPtr)pkt->data.raw.buf, buffer, 0, (int)pkt->data.raw.sz);
 					break;
 				default:
 					break;
@@ -108,7 +121,7 @@ namespace SIPSorceryMedia {
 		return 0;
 	}
 
-	int VPXEncoder::Decode(unsigned char* buffer, int bufferSize, array<Byte> ^% outBuffer, unsigned int % width, unsigned int % height)
+	int VpxEncoder::Decode(unsigned char* buffer, int bufferSize, array<Byte> ^% outBuffer, unsigned int % width, unsigned int % height)
 	{
 		vpx_codec_iter_t  iter = NULL;
 		vpx_image_t      *img;

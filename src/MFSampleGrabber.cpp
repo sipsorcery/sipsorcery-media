@@ -1,3 +1,12 @@
+//-----------------------------------------------------------------------------
+// Filename: MFSampleGrabber.cpp
+//
+// Description: See header.
+//
+// License: 
+// BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
+//-----------------------------------------------------------------------------
+
 #include "MFSampleGrabber.h"
 
 namespace SIPSorceryMedia
@@ -23,7 +32,7 @@ namespace SIPSorceryMedia
     //Console::WriteLine("C++ MFSampleGrabber.OnProcessSample " + dwSampleSize);
     // TODO: Properly determine whether audio or video.
     // MFMediaType_Audio MFMediaType_Video
-    int mediaType = (dwSampleSize > 5000) ? VIDEO_TYPE_ID : AUDIO_TYPE_ID;
+    int mediaType = (guidMajorMediaType == MFMediaType_Video) ? VIDEO_TYPE_ID : AUDIO_TYPE_ID; // TODO double check... 
 
     auto buffer = gcnew array<Byte>(dwSampleSize);
     Marshal::Copy((IntPtr)((byte*)pSampleBuffer), buffer, 0, dwSampleSize);
@@ -73,12 +82,12 @@ namespace SIPSorceryMedia
     CHECK_HR(hr = MFCreateSampleGrabberSinkActivate(pVideoType, pSampleGrabberSinkCallback, &pVideoSinkActivate));
 
     OnClockStartDelegate ^clockStartDelegate = gcnew OnClockStartDelegate(this, &MFSampleGrabber::OnClockStart);
-    GCHandle gchClockStart = GCHandle::Alloc(clockStartDelegate); // Stop delegate from being garbage ollected. TODO: gch.Free(); when finished.
+    GCHandle gchClockStart = GCHandle::Alloc(clockStartDelegate); // Stop delegate from being garbage collected. TODO: gch.Free(); when finished.
     IntPtr ipClockStart = Marshal::GetFunctionPointerForDelegate(clockStartDelegate);
     OnClockStartFunc cbClockStart = static_cast<OnClockStartFunc>(ipClockStart.ToPointer());
 
     OnProcessSampleDelegateNative ^processSampleDelegate = gcnew OnProcessSampleDelegateNative(this, &MFSampleGrabber::OnProcessSample);
-    GCHandle gchProcessSample = GCHandle::Alloc(processSampleDelegate); // Stop delegate from being garbage ollected. TODO: gch.Free(); when finished.
+    GCHandle gchProcessSample = GCHandle::Alloc(processSampleDelegate); // Stop delegate from being garbage collected. TODO: gch.Free(); when finished.
     IntPtr ipProcessSample = Marshal::GetFunctionPointerForDelegate(processSampleDelegate);
     OnProcessSampleFunc cbProcessSample = static_cast<OnProcessSampleFunc>(ipProcessSample.ToPointer());
 
@@ -473,7 +482,7 @@ HRESULT RunSession(IMFMediaSession *pSession, IMFTopology *pTopology, OnVideoRes
 
           // This seems a ridiculously convoluted way to extract the change to the video resolution. There may
           // be a simpler way but then again this is the Media Foundation and COM!
-          CHECK_HR_ERROR(pEvent->GetUINT64(MF_EVENT_OUTPUT_NODE, &outputNode), "Failed to get ouput node from media changed event.");
+          CHECK_HR_ERROR(pEvent->GetUINT64(MF_EVENT_OUTPUT_NODE, &outputNode), "Failed to get output node from media changed event.");
           CHECK_HR_ERROR(pTopology->GetNodeByID(outputNode, &pNode), "Failed to get topology node for output ID.");
           CHECK_HR_ERROR(pNode->GetObject(&pNodeObject), "Failed to get the node's object pointer.");
           CHECK_HR_ERROR(pNodeObject->QueryInterface(IID_PPV_ARGS(&pStreamSink)), "Failed to get media stream sink from activation object.");
