@@ -40,7 +40,7 @@ install:
       c:\tools\vcpkg\vcpkg integrate install
 build:
   parallel: true
-  project: SIPSorcery.Media\SIPSorceryMedia.sln
+  project: src\SIPSorceryMedia.sln
   publish_nuget: true
   publish_nuget_symbols: true
   verbosity: quiet
