@@ -134,7 +134,7 @@ class SampleGrabberCB: public IMFSampleGrabberSinkCallback
   SampleGrabberCB(): m_cRef(1) {}
 
 public:
-  static HRESULT CreateInstance(SampleGrabberCB **ppCB);
+  static HRESULT CreateInstance(SampleGrabberCB **ppCB, REFGUID mediaType);
 
   IMFMediaSession* _session = nullptr;
 
@@ -166,4 +166,5 @@ public:
 private:
   OnClockStartFunc _onClockStartFunc = nullptr;
   OnProcessSampleFunc _onProcessSampleFunc = nullptr;
+  GUID _mediaType = GUID_NULL;
 };
