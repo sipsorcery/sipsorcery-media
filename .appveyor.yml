@@ -26,6 +26,7 @@ for:
        - platform: x64
    environment:
      TRIPLET: 'x64-windows'
+ -
 install:
 # Powershell block below is to install the c++ dependencies via vcpkg.
 - ps: |
