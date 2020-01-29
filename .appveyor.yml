@@ -1,72 +1,44 @@
-version: '{branch}.{build}'
-skip_tags: true
-image: Visual Studio 2019
-configuration: Release
-platform: 
- - Win32
- - x64
+version: 1.0.{build}
+
+image:
+  - Visual Studio 2017
+  - Ubuntu
+configuration:
+  - Debug
+  - Release
 environment:
-  APPVEYOR_SAVE_CACHE_ON_ERROR: true
-  VCPKG_INSTALL_PATH: 'c:\tools\vcpkg\installed'
-  TRIPLET: 'x86-windows'
-  access_token:
-    secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
-cache:
-- C:\tools\vcpkg\installed # -> vcpkg-packages.txt
+  my_var1: value1
+  my_var2: value2
+  matrix:
+    - my_var3: value3
+    - my_var4: value4
+test_script:
+  - ps: Write-Host "common test script"
+matrix:
+  - fast_finish: true
 for:
- -
-   matrix:
-     only:
-       - platform: Win32
-   environment:
-     TRIPLET: 'x86-windows'
- -
-   matrix:
-     only:
-       - platform: x64
-   environment:
-     TRIPLET: 'x64-windows'
- -
-install:
-# Powershell block below is to install the c++ dependencies via vcpkg.
-- ps: |
-      WRITE-HOST "vcpkg triplet $env:TRIPLET"
-      $env:PACKAGES = Get-Content -Path vcpkg-packages.txt
-      Write-Host "vcpkg list: $env:PACKAGES"
-      if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
-          Add-Content "C:\tools\vcpkg\triplets\$env:TRIPLET.cmake" "set(VCPKG_BUILD_TYPE release)"
-          vcpkg install --triplet $env:TRIPLET $env:PACKAGES.split()
-      }
-      else {
-        Write-Host "required vcpkg packages already installed."
-      }
-      vcpkg integrate install
-build:
-  parallel: true
-  project: src\SIPSorceryMedia.sln
-  publish_nuget: true
-  publish_nuget_symbols: true
-  verbosity: quiet
-after_build:
-#- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
-artifacts:
-- path: /.*\.nupkg/
-deploy:
-  - provider: NuGet
-    server:                  # remove to push to NuGet.org
-    api_key:
-      secure: MMAD8YSvIgFD6mUWB2tdEGzBNbyfW/9TeB+yN325nQ/nHJMLhv2hBYan1CU1O60z
-    skip_symbols: false
-    symbol_server:           # remove to push symbols to SymbolSource.org
-    artifact: /.*\.nupkg/
-    on:
-      branch: master                # release from master branch only
-      APPVEYOR_REPO_TAG: true       # deploy on tag push only
-      appveyor_repo_tag: true
-  - provider: GitHub
-    artifact: /.*\.nupkg/           # upload all NuGet packages to release assets
-    draft: true
-    prerelease: true
-    on:
-      branch: master                # release from master branch only
-      APPVEYOR_REPO_TAG: true       # deploy on tag push only
+  -
+    matrix:
+      only:
+        - configuration: Release
+          my_var3: value3
+    environment:
+      my_var1: overriden-value1
+    platform: Any CPU # this setting is ignored
+    test_script:
+      - ps: write-host "for-matrix override test script 1"
+
+  -
+    matrix:
+      only:
+        - image: Ubuntu
+          my_var4: value4
+      pull_requests:
+        do_not_increment_build_number: true # this setting is ignored
+      allow_failures:
+        - platform: x64 # this setting is ignored
+    environment:
+      my_var2: overridden-value2
+    test_script:
+      - sh: echo for-matrix override build script
+      
