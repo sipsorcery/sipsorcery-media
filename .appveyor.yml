@@ -8,6 +8,7 @@ platform:
 environment:
   APPVEYOR_SAVE_CACHE_ON_ERROR: true
   VCPKG_INSTALL_PATH: 'c:\tools\vcpkg\installed'
+  TRIPLET: 'x86-windows'
   access_token:
     secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
 cache:
@@ -17,20 +18,19 @@ for:
     matrix:
       only:
         - platform: Win32
-      install:
-      -ps: |
-           Write-Host "install for x86-windows"
+      environment:
+        TRIPLET: 'x86-windows'
   -
     matrix:
       only:
         - platform: x64
-      install:
-      -ps: |
-           Write-Host "install for x64-windows"
+      environment:
+        TRIPLET: 'x64-windows'
   -
 install:
 # Powershell block below is to install the c++ dependencies via vcpkg.
 - ps: |
+      WRITE-HOST "vcpkg triplet $env:TRIPLET"
       $env:PACKAGES = Get-Content -Path vcpkg-packages.txt
       Write-Host "vcpkg list: $env:PACKAGES"
       if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
