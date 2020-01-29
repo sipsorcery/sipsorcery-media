@@ -12,32 +12,32 @@ environment:
     secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
 cache:
 - C:\tools\vcpkg\installed # -> vcpkg-packages.txt
+for:
+  -
+    matrix:
+      only:
+        - platform: Win32
+        environment:
+          TRIPLET: x86-windows
+  -
+    matrix:
+      only:
+        - platform: x64
+        environment:
+          TRIPLET: x64-windows
 install:
-# Powershell block below is to install the c++ dependencies via vcpkg. The pseudo code is:
-# 1. Check whether the vcpkg install directory exists (note that updating the vcpkg-packages.txt file
-#    will cause the appveyor cache rules to invalidate the directory)
-# 2. If the directory is missing:
-#    a. Update the vcpkg source (including port files) and build the vcpkg binary,
-#    b. Install the missing packages.
+# Powershell block below is to install the c++ dependencies via vcpkg.
 - ps: |
       $env:PACKAGES = Get-Content -Path vcpkg-packages.txt
       Write-Host "vcpkg list: $env:PACKAGES"
-      #if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
-      if(1) {
-          cd c:\tools\vcpkg
-          $env:GIT_REDIRECT_STDERR = '2>&1' # git is writing non-errors to STDERR when doing git pull. Send to STDOUT instead.
-          git pull origin master
-          .\bootstrap-vcpkg.bat
-          Add-Content "C:\tools\vcpkg\triplets\x86-windows.cmake" "set(VCPKG_BUILD_TYPE release)"
-          Add-Content "C:\tools\vcpkg\triplets\x64-windows.cmake" "set(VCPKG_BUILD_TYPE release)"
-          .\vcpkg install --triplet x86-windows $env:PACKAGES.split()
-          .\vcpkg install --triplet x64-windows $env:PACKAGES.split()
-          cd "$env:APPVEYOR_BUILD_FOLDER"
+      if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
+          Add-Content "C:\tools\vcpkg\triplets\$env:TRIPLET.cmake" "set(VCPKG_BUILD_TYPE release)"
+          vcpkg install --triplet $env:TRIPLET $env:PACKAGES.split()
       }
       else {
         Write-Host "required vcpkg packages already installed."
       }
-      c:\tools\vcpkg\vcpkg integrate install
+      vcpkg integrate install
 build:
   parallel: true
   project: src\SIPSorceryMedia.sln
