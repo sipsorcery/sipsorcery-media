@@ -150,7 +150,10 @@ namespace SIPSorceryMedia {
     }
 
     SSL_set_bio(_k->ssl, _k->bio, _k->bio);
-    SSL_set_info_callback(_k->ssl, krx_ssl_info_callback);
+
+    if (Debug) {
+      SSL_set_info_callback(_k->ssl, krx_ssl_info_callback);
+    }
 
     // Wait for a client to initiate the DTLS handshake.
     SSL_set_accept_state(_k->ssl);
@@ -169,7 +172,7 @@ namespace SIPSorceryMedia {
       return HANDSHAKE_ERROR_STATUS;
     }
     else {
-      printf("DTLS Handshake completed.\n");
+      printf("DTLS server handshake completed.\n");
     }
 
     // Dump any openssl errors.
@@ -181,16 +184,35 @@ namespace SIPSorceryMedia {
   /*
   * Performs the client side of a DTLS handshake.
   */
-  int DtlsHandshake::DoHandshakeAsClient(SOCKET rtpSocket, short svrAddrFamily, u_long svrIPAddr, u_short svrPort)
+  int DtlsHandshake::DoHandshakeAsClient(SOCKET rtpSocket, short svrAddrFamily, array<Byte>^ addrBytes, u_short svrPort)
   {
     // Dump any openssl errors.
     ERR_print_errors_fp(stderr);
 
     int r = 0;
-    sockaddr_in svrAddr;
-    svrAddr.sin_family = svrAddrFamily;
-    svrAddr.sin_addr.s_addr = htonl(svrIPAddr);
-    svrAddr.sin_port = htons(svrPort);
+    sockaddr * pSvrAddr = nullptr;
+    int svrAddrSize = 0;
+    sockaddr_in svrAddr4 = { 0 };
+    sockaddr_in6 svrAddr6 = { 0 };
+
+    if (svrAddrFamily == AF_INET6) {
+      svrAddr6.sin6_family = AF_INET6;
+      //svrAddr6.sin6_addr = in6addr_loopback;
+      memcpy_s((void*)&svrAddr6.sin6_addr, sizeof(in6_addr), &addrBytes, addrBytes->Length);
+      svrAddr6.sin6_port = htons(svrPort);
+
+      pSvrAddr = (sockaddr*)&svrAddr6;
+      svrAddrSize = sizeof(svrAddr6);
+    }
+    else {
+      svrAddr4.sin_family = AF_INET;
+      memcpy_s((void*)&svrAddr4.sin_addr, sizeof(in_addr), &addrBytes, addrBytes->Length);
+      //svrAddr4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+      svrAddr4.sin_port = htons(svrPort);
+
+      pSvrAddr = (sockaddr*)&svrAddr4;
+      svrAddrSize = sizeof(svrAddr4);
+    }
 
     /* create a new context using DTLS */
     _k->ctx = SSL_CTX_new(DTLS_client_method());
@@ -233,12 +255,15 @@ namespace SIPSorceryMedia {
     }
 
     SSL_set_bio(_k->ssl, _k->bio, _k->bio);
-    SSL_set_info_callback(_k->ssl, krx_ssl_info_callback);
+
+    if (Debug) {
+      SSL_set_info_callback(_k->ssl, krx_ssl_info_callback);
+    }
 
     // We will be initiating the handshake.
     SSL_set_connect_state(_k->ssl);
 
-    if (BIO_ctrl(_k->bio, BIO_CTRL_DGRAM_SET_CONNECTED, 0, &svrAddr) <= 0) {
+    if (BIO_ctrl(_k->bio, BIO_CTRL_DGRAM_SET_CONNECTED, 0, pSvrAddr) <= 0) {
       printf("Error: BIO_CTL to set BIO_CTRL_DGRAM_SET_CONNECTED failed.\n");
     }
 
@@ -249,7 +274,7 @@ namespace SIPSorceryMedia {
       return HANDSHAKE_ERROR_STATUS;
     }
     else {
-      printf("DTLS Handshake completed.\n");
+      printf("DTLS client handshake completed.\n");
     }
 
     // Dump any openssl errors.

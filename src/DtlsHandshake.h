@@ -58,6 +58,9 @@
 
 #pragma once
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include <openssl/bio.h>
 #include <openssl/dtls1.h>
 #include <openssl/err.h>
@@ -67,6 +70,9 @@
 #include <msclr/marshal_cppstd.h>
 
 #include <string>
+
+using namespace System;
+using namespace System::Runtime::InteropServices;
 
 #define SRTP_ALGORITHM "SRTP_AES128_CM_SHA1_80"
 #define DTLS_COOKIE "sipsorcery"
@@ -100,6 +106,8 @@ namespace SIPSorceryMedia {
     bool _handshakeComplete = false;
 
   public:
+
+    property System::Boolean Debug;
 
     /**
     Initialises the OpenSSL library. Only needs to be called once per process.
@@ -154,7 +162,7 @@ namespace SIPSorceryMedia {
     *  end point.
     * @@Returns: 0 if the handshake completed successfully or -1 if there was an error.
     */
-    int DoHandshakeAsClient(SOCKET socket, short svrAddrFamily, u_long svrAddr, u_short svrPort);
+    int DoHandshakeAsClient(SOCKET socket, short svrAddrFamily, array<Byte>^ addrBytes, u_short svrPort);
 
     /**
     * Checks whether the DTLS handshake has been completed.
