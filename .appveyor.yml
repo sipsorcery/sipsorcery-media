@@ -14,19 +14,19 @@ environment:
 cache:
 - C:\tools\vcpkg\installed # -> vcpkg-packages.txt
 for:
-  -
-    matrix:
-      only:
-        - platform: Win32
-      environment:
-        TRIPLET: 'x86-windows'
-  -
-    matrix:
-      only:
-        - platform: x64
-      environment:
-        TRIPLET: 'x64-windows'
-  -
+ -
+   matrix:
+     only:
+       - platform: Win32
+   environment:
+     TRIPLET: 'x86-windows'
+ -
+   matrix:
+     only:
+       - platform: x64
+   environment:
+     TRIPLET: 'x64-windows'
+ -
 install:
 # Powershell block below is to install the c++ dependencies via vcpkg.
 - ps: |
