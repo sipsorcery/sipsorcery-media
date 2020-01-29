@@ -17,8 +17,8 @@
 #include <mmdeviceapi.h>
 #include <Audioclient.h>
 
-#include <msclr\marshal.h>
-#include <msclr\marshal_cppstd.h>
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
 
 #include "VideoSubTypes.h"
 
@@ -53,15 +53,6 @@ if (Attr == _Attribute) \
 	goto done; \
 } \
 
-#if defined(__cplusplus)
-extern "C" {
-
-	// See https://social.msdn.microsoft.com/Forums/en-US/8a4adc97-7f74-44bf-8bae-144a273e62fe/guid-6d703461767a494db478f29d25dc9037?forum=os_windowsprotocols and
-	// https://msdn.microsoft.com/en-us/library/dd757766(v=vs.85).aspx
-	DEFINE_GUID(MFMPEG4Format_MP4A, 0x6d703461, 0x767a, 0x494d, 0xb4, 0x78, 0xf2, 0x9d, 0x25, 0xdc, 0x90, 0x37);
-}
-#endif
-
 namespace SIPSorceryMedia {
 
   LPCSTR STRING_FROM_GUID(GUID Attr);
@@ -93,8 +84,8 @@ namespace SIPSorceryMedia {
     Guid VideoSubType;
     String ^ VideoSubTypeFriendlyName;
     UInt64 Timestamp;
-    UInt32 FrameCount;               // Number of audio of video frames contained in the raw sample.
-    UInt64 NowMilliseconds;         // THe current time the sample was received in millisecodn resolution.
+    UInt32 FrameCount;								// Number of audio of video frames contained in the raw sample.
+    UInt64 NowMilliseconds;						// The current time the sample was received in millisecond resolution.
 
     MediaSampleProperties():
       Success(true),
@@ -139,12 +130,9 @@ namespace SIPSorceryMedia {
 		HRESULT FindVideoMode(IMFSourceReader *pReader, const GUID mediaSubType, UInt32 width, UInt32 height, /* out */ IMFMediaType *&foundpType);
     MediaSampleProperties^ GetSample(/* out */ array<Byte> ^% buffer);
 		HRESULT GetAudioSample(/* out */ array<Byte> ^% buffer);
-    MediaSampleProperties^ GetNextSample(int streamTypeIndex, /* out */ array<Byte> ^% buffer, uint64_t delayUntil);
+    MediaSampleProperties^ GetNextSample(/* out */ array<Byte> ^% buffer);
 		HRESULT PlayAudio();
 		void Stop();
-		//void DumpVideoSubTypes();
-		HRESULT MFVideoSampler::PlayTestAudio();
-		HRESULT MFVideoSampler::PlayFileToSpeaker();
 
 		property int Width {
 			int get() { return _width; }
@@ -161,11 +149,15 @@ namespace SIPSorceryMedia {
 	private:
 
 		static BOOL _isInitialised = false;
+		const int MAX_STREAM_INDEX = 10;
+		const int TIMESTAMP_MILLISECOND_DIVISOR = 10000;	// Media sample timestamps are given in 100's of nano seconds.
 
 		IMFSourceReader * _sourceReader = NULL;
 		IMFMediaSink * _audioSink = NULL;             // Streaming audio renderer (SAR)
 		DWORD videoStreamIndex;
 		int _width, _height, _stride;
+		int _audioStreamIndex = -1, _videoStreamIndex = -1;
+		System::DateTime _playbackStart = System::DateTime::MinValue;
 
 		HRESULT GetDefaultStride(IMFMediaType *pType, /* out */ LONG *plStride);
 

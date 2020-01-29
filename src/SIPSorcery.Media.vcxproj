@@ -113,9 +113,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Dtls.h" />
+    <ClInclude Include="DtlsHandshake.h" />
     <ClInclude Include="ImageConvert.h" />
-    <ClInclude Include="MFSampleGrabber.h" />
     <ClInclude Include="MFVideoSampler.h" />
     <ClInclude Include="Srtp.h" />
     <ClInclude Include="VideoSubTypes.h" />
@@ -123,9 +122,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
-    <ClCompile Include="Dtls.cpp" />
+    <ClCompile Include="DtlsHandshake.cpp" />
     <ClCompile Include="ImageConvert.cpp" />
-    <ClCompile Include="MFSampleGrabber.cpp" />
     <ClCompile Include="MFVideoSampler.cpp" />
     <ClCompile Include="Srtp.cpp" />
     <ClCompile Include="VpxEncoder.cpp" />

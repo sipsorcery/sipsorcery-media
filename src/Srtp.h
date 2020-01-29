@@ -27,7 +27,7 @@
 
 #pragma once
 
-#include "Dtls.h"
+#include "DtlsHandshake.h"
 
 #include "srtp2/srtp.h"
 #include "openssl/srtp.h"
@@ -37,6 +37,7 @@
 #include <iostream>
 
 using namespace System;
+using namespace System::Runtime::InteropServices;
 
 namespace SIPSorceryMedia {
 
@@ -73,7 +74,7 @@ namespace SIPSorceryMedia {
 			* @param[in] isClient: set to true if the SRTP session is being used to receive or
 			*  false if it being used to send.
 			*/
-			Srtp(Dtls^ dtlsContext, bool isClient);
+			Srtp(DtlsHandshake^ dtlsContext, bool isClient);
 
 			/**
 			* Destructor. Cleans up the SRTP session context.
@@ -87,14 +88,14 @@ namespace SIPSorceryMedia {
 			* @param[in] length: The length of the RTP payload NOT including the bytes
 			*  allocated for the SRTP authentication token.
 			*/
-			int ProtectRTP(cli::array<System::Byte>^ buffer, int length);
+			int ProtectRTP(cli::array<System::Byte>^ buffer, int length, [Out] int% outBufferLength);
 
 			/**
 			* Attempts to decrypt and/or authorise an RTP packet.
 			* @param[in] buffer: The buffer containing the RTP packet to unprotect.
 			* @param[in] length: The length of the RTP packet.
 			*/
-			int UnprotectRTP(cli::array<System::Byte>^ buffer, int length);
+			int UnprotectRTP(cli::array<System::Byte>^ buffer, int length, [Out] int% outBufferLength);
 
 			/**
 			* Protects an RTCP packet ready for sending.
@@ -103,14 +104,14 @@ namespace SIPSorceryMedia {
 			* @param[in] length: The length of the RTCP payload NOT including the bytes
 			*  allocated for the SRTP authentication token.
 			*/
-      int ProtectRTCP(cli::array<System::Byte>^ buffer, int length);
+      int ProtectRTCP(cli::array<System::Byte>^ buffer, int length, [Out] int% outBufferLength);
 
 			/**
 			* Attempts to decrypt and/or authorise an RTCP packet.
 			* @param[in] buffer: The buffer containing the RTCP packet to unprotect.
 			* @param[in] length: The length of the RTCP packet.
 			*/
-			int UnprotectRTCP(cli::array<System::Byte>^ buffer, int length);
+			int UnprotectRTCP(cli::array<System::Byte>^ buffer, int length, [Out] int% outBufferLength);
 
 		private:
 

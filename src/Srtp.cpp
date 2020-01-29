@@ -43,7 +43,7 @@ namespace SIPSorceryMedia {
 		std::cout << "Create srtp session result " << err << "." << std::endl;
 	}
 
-	Srtp::Srtp(Dtls^ dtlsContext, bool isClient)
+	Srtp::Srtp(DtlsHandshake^ dtlsContext, bool isClient)
 	{
 		InitialiseLibSrtp();
 
@@ -115,28 +115,36 @@ namespace SIPSorceryMedia {
 		}
 	}
 
-	int Srtp::UnprotectRTP(cli::array<System::Byte>^ buffer, int length)
+	int Srtp::UnprotectRTP(cli::array<System::Byte>^ buffer, int length, [Out] int% outBufferLength)
 	{
 		pin_ptr<System::Byte> p = &buffer[0];
-		return srtp_unprotect(*_session, reinterpret_cast<char*>(p), &length);
+		int res = srtp_unprotect(*_session, reinterpret_cast<char*>(p), &length);
+		outBufferLength = length;
+		return res;
 	}
 
-	int Srtp::ProtectRTP(cli::array<System::Byte>^ buffer, int length)
+	int Srtp::ProtectRTP(cli::array<System::Byte>^ buffer, int length, [Out] int% outBufferLength)
 	{
 		pin_ptr<System::Byte> p = &buffer[0];
-		return srtp_protect(*_session, reinterpret_cast<char*>(p), &length);
+		int res = srtp_protect(*_session, reinterpret_cast<char*>(p), &length);
+		outBufferLength = length;
+		return res;
 	}
 
-  int Srtp::ProtectRTCP(cli::array<System::Byte>^ buffer, int length)
+  int Srtp::ProtectRTCP(cli::array<System::Byte>^ buffer, int length, [Out] int% outBufferLength)
   {
 		pin_ptr<System::Byte> p = &buffer[0];
-    return srtp_protect_rtcp(*_session, reinterpret_cast<char*>(p), &length);
+		int res = srtp_protect_rtcp(*_session, reinterpret_cast<char*>(p), &length);
+		outBufferLength = length;
+		return res;
   }
 
-	int Srtp::UnprotectRTCP(cli::array<System::Byte>^ buffer, int length)
+	int Srtp::UnprotectRTCP(cli::array<System::Byte>^ buffer, int length, [Out] int% outBufferLength)
 	{
 		pin_ptr<System::Byte> p = &buffer[0];
-		return srtp_unprotect_rtcp(*_session, reinterpret_cast<char*>(p), &length);
+		int res = srtp_unprotect_rtcp(*_session, reinterpret_cast<char*>(p), &length);
+		outBufferLength = length;
+		return res;
 	}
 
 	Srtp::~Srtp()

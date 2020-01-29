@@ -1,8 +1,8 @@
 //-----------------------------------------------------------------------------
-// Filename: Dtls.h
+// Filename: DtlsHandshake.h
 //
-// Description: A rudimentary Data Transport Layer Security (DTLS) wrapper 
-// around OpenSSL DTLS functions.
+// Description: Performs either the server or client end of a DTLS handshake.
+// The handshake provides the keying material for the SRTP session.
 //
 // Author(s):
 // Aaron Clauson (aaron@sipsorcery.com)
@@ -11,6 +11,7 @@
 // ??	          Aaron Clauson	  Created, based on https://gist.github.com/roxlu/9835067.
 // 24 Aug 2019  Aaron Clauson   Added header comment block.
 // 19 Jan 2020  Aaron Clauson   Switched from using memory to datagram BIO.
+// 29 Jan 2020  Aaron Clauson   Added method for client handshake.
 //
 // License: 
 // BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
@@ -57,8 +58,11 @@
 
 #pragma once
 
-#include "openssl/srtp.h"
-#include "openssl/err.h"
+#include <openssl/bio.h>
+#include <openssl/dtls1.h>
+#include <openssl/err.h>
+#include <openssl/srtp.h>
+#include <openssl/ssl.h>
 #include <msclr/marshal.h>
 #include <msclr/marshal_cppstd.h>
 
@@ -85,22 +89,7 @@ namespace SIPSorceryMedia {
     BIO* bio;
   } krx;
 
-  /**
-  * Convenience enum for SSL states defined in ssl.h.
-  */
-  public enum class DtlsState
-  {
-    CONNECT = 0x1000,
-    ACCEPT = 0x2000,
-    MASK = 0x0FFF,
-    SSLSTINIT = (SSL_ST_CONNECT|SSL_ST_ACCEPT),
-    BEFORE = 0x4000,
-    OK = 0x03,
-    SSLSTRENEGOTIATE = (0x04|SSL_ST_INIT),
-    SSLSTERR = (0x05|SSL_ST_INIT),
-  };
-
-  public ref class Dtls
+  public ref class DtlsHandshake
   {
   private:
     static bool _isOpenSSLInitialised = false;
@@ -131,39 +120,47 @@ namespace SIPSorceryMedia {
     }
 
     /**
-    * Constructor.
+    * Constructor for acting as the client side of the handshake.
+    */
+    DtlsHandshake();
+
+    /**
+    * Constructor for acting as the server side of the handshake.
     * @param[in] certFile: path to the certificate file, must be in PEM format.
     * @param[in] keyFile: path to the private key file, must be in PEM format.
     */
-    Dtls(System::String^ certFile, System::String^ _keyFile);
+    DtlsHandshake(System::String^ certFile, System::String^ _keyFile);
 
     /**
     * Destructor. Cleans up the SSL context and associated structures.
     */
-    ~Dtls();
+    ~DtlsHandshake();
 
     /**
-    * Initialises the SSL context, API and other bits and pieces required to 
-    * accept DTLS clients or connect to a DTLS server. It then waits for the 
-    * DTLS handshake to complete on the provided socket handle.
+    * Performs the DTLS handshake as the server. This method blocks waiting for the 
+    * client to initiate the connection and then attempts to complete the handshake.
     * @param[in] socket: handle to the socket to perform the DTLS handshake on. Note
     *  the SSL context is configured in "accept" mode which means our end is acting
     *  as the server. The remote socket will need to initiate the DTLS handshake.
     * @@Returns: 0 if the handshake completed successfully or -1 if there was an error.
     */
-    int DoHandshake(SOCKET socket);
+    int DoHandshakeAsServer(SOCKET socket);
+
+    /**
+    * Performs the DTLS handshake as the client. It will initiate the handshake to
+    * the DTLS server.
+    * @param[in] socket: handle to the socket to perform the DTLS handshake on. 
+    *  IMPORTANT: the socket must have had connect called to set the remote destination
+    *  end point.
+    * @@Returns: 0 if the handshake completed successfully or -1 if there was an error.
+    */
+    int DoHandshakeAsClient(SOCKET socket, short svrAddrFamily, u_long svrAddr, u_short svrPort);
 
     /**
     * Checks whether the DTLS handshake has been completed.
     * @@Returns: true if it has been completed or false if not.
     */
     bool IsHandshakeComplete();
-
-    /**
-    * Gets the state of the SSL connection. It should match one of the options
-    * in the DtlsState enum.
-    */
-    int GetState();
 
     /**
     * Shutsdown the SSL context and the instance and cleans up.
