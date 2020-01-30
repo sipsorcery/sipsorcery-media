@@ -131,6 +131,7 @@ namespace SIPSorceryMedia {
 
     _width = width;
     _height = height;
+    _isLiveSource = true;
 
     // Create an attribute store to hold the search criteria.
     CHECK_HR(MFCreateAttributes(&videoConfig, 1), L"Error creating video configuration.");
@@ -178,12 +179,18 @@ namespace SIPSorceryMedia {
         long stride = -1;
         CHECK_HR(GetDefaultStride(videoType, &stride), L"There was an error retrieving the stride for the media type.");
         _stride = (int)stride;
+
+        Console::WriteLine("Webcam Video Description:");
+        std::cout << GetMediaTypeDescription(videoType) << std::endl;
       }
 
       videoConfig->Release();
       videoSource->Release();
       videoType->Release();
       desiredInputVideoType->Release();
+
+      // Iterate through the source reader streams to identify the audio and video stream indexes.
+      CHECK_HR(SetStreamIndexes(), "Failed to set stream indexes.");
 
       return S_OK;
     }
@@ -304,6 +311,16 @@ namespace SIPSorceryMedia {
     audioType->Release();
 
     // Iterate through the source reader streams to identify the audio and video stream indexes.
+    CHECK_HR(SetStreamIndexes(), "Failed to set stream indexes.");
+
+    return S_OK;
+  }
+
+  /*
+  * Set the audio and video stream indexes based on how the source reader has assigned them.
+  */
+  HRESULT MFVideoSampler::SetStreamIndexes()
+  {
     HRESULT getStreamRes = S_OK;
 
     for (int i = 0; i < MAX_STREAM_INDEX && getStreamRes == S_OK; i++) {
@@ -326,7 +343,7 @@ namespace SIPSorceryMedia {
       }
     }
 
-    return S_OK;
+    return getStreamRes;
   }
 
   HRESULT MFVideoSampler::FindVideoMode(IMFSourceReader* pReader, const GUID mediaSubType, UInt32 width, UInt32 height, /* out */ IMFMediaType*& foundpType)
@@ -375,202 +392,8 @@ namespace SIPSorceryMedia {
     return S_OK;
   }
 
-  MediaSampleProperties^ MFVideoSampler::GetSample(/* out */ array<Byte>^% buffer)
-  {
-    MediaSampleProperties^ sampleProps = gcnew MediaSampleProperties();
-
-    if (_sourceReader == NULL) {
-      sampleProps->Success = false;
-      return sampleProps;
-    }
-    else {
-      IMFSample* videoSample = NULL;
-      DWORD streamIndex, flags;
-      LONGLONG llVideoTimeStamp;
-
-      // Initial read results in a null pSample??
-      CHECK_HR_EXTENDED(_sourceReader->ReadSample(
-        //MF_SOURCE_READER_ANY_STREAM,    // Stream index.
-        MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-        0,                              // Flags.
-        &streamIndex,                   // Receives the actual stream index. 
-        &flags,                         // Receives status flags.
-        &llVideoTimeStamp,                   // Receives the time stamp.
-        &videoSample                        // Receives the sample or NULL.
-      ), L"Error reading video sample.");
-
-      if (flags & MF_SOURCE_READERF_ENDOFSTREAM)
-      {
-        wprintf(L"\tEnd of stream\n");
-      }
-      if (flags & MF_SOURCE_READERF_NEWSTREAM)
-      {
-        wprintf(L"\tNew stream\n");
-      }
-      if (flags & MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED)
-      {
-        wprintf(L"\tNative type changed\n");
-      }
-      if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED)
-      {
-        wprintf(L"\tCurrent type changed\n");
-
-        IMFMediaType* videoType = NULL;
-        CHECK_HR_EXTENDED(_sourceReader->GetCurrentMediaType(
-          (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-          &videoType), L"Error retrieving current media type from first video stream.");
-
-        std::cout << GetMediaTypeDescription(videoType) << std::endl;
-
-        // Get the frame dimensions and stride
-        UINT32 nWidth, nHeight;
-        CHECK_HR_EXTENDED(MFGetAttributeSize(videoType, MF_MT_FRAME_SIZE, &nWidth, &nHeight), L"There was an error retrieving the dimensions for the media type.");
-        _width = nWidth;
-        _height = nHeight;
-
-        long stride = -1;
-        CHECK_HR_EXTENDED(GetDefaultStride(videoType, &stride), L"There was an error retrieving the stride for the media type.");
-        _stride = (int)stride;
-
-        sampleProps->Width = nWidth;
-        sampleProps->Height = nHeight;
-        sampleProps->Stride = stride;
-
-        videoType->Release();
-      }
-      if (flags & MF_SOURCE_READERF_STREAMTICK)
-      {
-        wprintf(L"\tStream tick\n");
-      }
-
-      if (!videoSample)
-      {
-        printf("Failed to get video sample from MF.\n");
-      }
-      else
-      {
-        DWORD nCurrBufferCount = 0;
-        CHECK_HR_EXTENDED(videoSample->GetBufferCount(&nCurrBufferCount), L"Failed to get the buffer count from the video sample.\n");
-
-        IMFMediaBuffer* pMediaBuffer;
-        CHECK_HR_EXTENDED(videoSample->ConvertToContiguousBuffer(&pMediaBuffer), L"Failed to extract the video sample into a raw buffer.\n");
-
-        DWORD nCurrLen = 0;
-        CHECK_HR_EXTENDED(pMediaBuffer->GetCurrentLength(&nCurrLen), L"Failed to get the length of the raw buffer holding the video sample.\n");
-
-        byte* imgBuff;
-        DWORD buffCurrLen = 0;
-        DWORD buffMaxLen = 0;
-        pMediaBuffer->Lock(&imgBuff, &buffMaxLen, &buffCurrLen);
-
-        buffer = gcnew array<Byte>(buffCurrLen);
-        Marshal::Copy((IntPtr)imgBuff, buffer, 0, buffCurrLen);
-
-        pMediaBuffer->Unlock();
-        pMediaBuffer->Release();
-
-        videoSample->Release();
-
-        sampleProps->HasVideoSample = true;
-        sampleProps->Width = _width;
-        sampleProps->Height = _height;
-        sampleProps->Stride = _stride;
-
-        return sampleProps;
-      }
-    }
-  }
-
-  HRESULT MFVideoSampler::GetAudioSample(/* out */ array<Byte>^% buffer)
-  {
-    if (_sourceReader == NULL) {
-      return -1;
-    }
-    else {
-      IMFSample* audioSample = NULL;
-      DWORD streamIndex, flags;
-      LONGLONG llVideoTimeStamp;
-
-      // Initial read results in a null pSample??
-      CHECK_HR(_sourceReader->ReadSample(
-        MF_SOURCE_READER_FIRST_AUDIO_STREAM,
-        0,                              // Flags.
-        &streamIndex,                   // Receives the actual stream index. 
-        &flags,                         // Receives status flags.
-        &llVideoTimeStamp,                   // Receives the time stamp.
-        &audioSample                        // Receives the sample or NULL.
-      ), L"Error reading audio sample.");
-
-      if (flags & MF_SOURCE_READERF_ENDOFSTREAM)
-      {
-        wprintf(L"\tEnd of stream\n");
-      }
-      if (flags & MF_SOURCE_READERF_NEWSTREAM)
-      {
-        wprintf(L"\tNew stream\n");
-      }
-      if (flags & MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED)
-      {
-        wprintf(L"\tNative type changed\n");
-      }
-      if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED)
-      {
-        wprintf(L"\tCurrent type changed\n");
-
-        IMFMediaType* audioType = NULL;
-        CHECK_HR(_sourceReader->GetCurrentMediaType(
-          (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM,
-          &audioType), L"Error retrieving current media type from first audio stream.");
-
-        std::cout << GetMediaTypeDescription(audioType) << std::endl;
-
-        audioType->Release();
-      }
-      if (flags & MF_SOURCE_READERF_STREAMTICK)
-      {
-        wprintf(L"\tStream tick\n");
-      }
-
-      if (!audioSample)
-      {
-        printf("Failed to get audio sample from MF.\n");
-      }
-      else
-      {
-        DWORD nCurrBufferCount = 0;
-        CHECK_HR(audioSample->GetBufferCount(&nCurrBufferCount), L"Failed to get the buffer count from the audio sample.\n");
-        //Console::WriteLine("Buffer count " + nCurrBufferCount);
-
-        IMFMediaBuffer* pMediaBuffer;
-        CHECK_HR(audioSample->ConvertToContiguousBuffer(&pMediaBuffer), L"Failed to extract the audio sample into a raw buffer.\n");
-
-        DWORD nCurrLen = 0;
-        CHECK_HR(pMediaBuffer->GetCurrentLength(&nCurrLen), L"Failed to get the length of the raw buffer holding the audio sample.\n");
-
-        byte* audioBuff;
-        DWORD buffCurrLen = 0;
-        DWORD buffMaxLen = 0;
-        pMediaBuffer->Lock(&audioBuff, &buffMaxLen, &buffCurrLen);
-
-        buffer = gcnew array<Byte>(buffCurrLen);
-        Marshal::Copy((IntPtr)audioBuff, buffer, 0, buffCurrLen);
-
-        //for(int i=0; i<buffCurrLen; i++) {
-        //  buffer[i] = (buffer[i] < 0x80) ? 0x80 | buffer[i] : 0x7f & buffer[i]; // Convert from an 8 bit unsigned sample to an 8 bit 2's complement signed sample.
-        //}
-
-        pMediaBuffer->Unlock();
-        pMediaBuffer->Release();
-
-        audioSample->Release();
-
-        return S_OK;
-      }
-    }
-  }
-
   // Gets the next available sample from the source reader.
-  MediaSampleProperties^ MFVideoSampler::GetNextSample(/* out */ array<Byte>^% buffer)
+  MediaSampleProperties^ MFVideoSampler::GetSample(/* out */ array<Byte>^% buffer)
   {
     MediaSampleProperties^ sampleProps = gcnew MediaSampleProperties();
 
@@ -686,7 +509,7 @@ namespace SIPSorceryMedia {
             sampleProps->HasAudioSample = true;
           }
 
-          if (sampleProps->HasAudioSample || sampleProps->HasVideoSample) {
+          if (!_isLiveSource && (sampleProps->HasAudioSample || sampleProps->HasVideoSample)) {
 
             auto currentPlaybackTimestamp = (Int64)(System::DateTime::Now - _playbackStart).TotalMilliseconds;
 
@@ -702,223 +525,6 @@ namespace SIPSorceryMedia {
       } // End of sample.
 
       return sampleProps;
-    }
-  }
-
-  HRESULT MFVideoSampler::PlayAudio()
-  {
-    HRESULT hr = S_OK;
-
-    IMMDeviceEnumerator* pEnum = NULL;      // Audio device enumerator.
-    //IMMDeviceCollection *pDevices = NULL;   // Audio device collection.
-    IMMDevice* pDevice = NULL;              // An audio device.
-    IMFAttributes* pAttributes = NULL;      // Attribute store.
-    LPWSTR wstrID = NULL;                   // Device ID.
-    IMFMediaSink* pAudioSink = NULL;
-    IMFSinkWriter* pSinkWriter = NULL;
-    //IMFAttributes * pAudioOutType = NULL;
-    IMFStreamSink* pStreamSink = NULL;
-    IMFMediaTypeHandler* pMediaTypeHandler = NULL;
-    IMFMediaType* pMediaType = NULL;
-    IMFMediaType* pSinkMediaType = NULL;
-    DWORD mediaTypeCount;
-
-    // Create the device enumerator.
-    /*CHECK_HR(CoCreateInstance(
-      __uuidof(MMDeviceEnumerator),
-      NULL,
-      CLSCTX_ALL,
-      __uuidof(IMMDeviceEnumerator),
-      (void**)&pEnum
-      ), L"Failed to create MF audio device enumberator.");*/
-
-      //CHECK_HR(pEnum->GetDefaultAudioEndpoint(eRender, eMultimedia, &pDevice), L"Failed to get default audio end point.");
-      //hr = pMmDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (VOID**)&pAudioClient);
-
-      // Enumerate the rendering devices.
-      //if (SUCCEEDED(hr))
-      //{
-      //	hr = pEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pDevices);
-      //}
-
-      //// Get ID of the first device in the list.
-      //if (SUCCEEDED(hr))
-      //{
-      //	hr = pDevices->Item(0, &pDevice);
-      //}
-
-      //CHECK_HR(pDevice->GetId(&wstrID), L"Failed to get audio device ID.");
-      //wprintf(L"Audio device ID %s.\n", wstrID);
-
-      // Create an attribute store and set the device ID attribute.
-      //CHECK_HR(MFCreateAttributes(&pAttributes, 2), L"Failed to create IMFAttributes object.");
-
-      //CHECK_HR(pAttributes->SetString(MF_AUDIO_RENDERER_ATTRIBUTE_ENDPOINT_ID, wstrID), L"Failed so set audio render string.");
-
-      // Create the audio renderer.
-      // Create the source readers. Need to pin the video reader as it's a managed resource being access by native code.
-      //cli::pin_ptr<IMFMediaSink*> pinnedAudioSink = &_audioSink;
-
-      //hr = MFCreateAudioRenderer(pAttributes, reinterpret_cast<IMFMediaSink**>(pinnedAudioSink));
-      //CHECK_HR(MFCreateAudioRenderer(pAttributes, &pAudioSink), L"Failed to create audio sink.");
-    CHECK_HR(MFCreateAudioRenderer(NULL, &pAudioSink), L"Failed to create audio sink.");
-
-    /*CHECK_HR(_sourceReader->GetCurrentMediaType(
-      (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM,
-      &audioType), L"Error retrieving current type from first audio stream.");
-
-    Console::WriteLine(GetMediaTypeDescription(audioType));*/
-
-    /*CHECK_HR(MFCreateAttributes(&pAudioOutType, 2), L"Failed to create IMFAttributes object for audio out.");
-
-    CHECK_HR(pAudioOutType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio), L"Failed to set audio output media major type.");
-    CHECK_HR(pAudioOutType->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM), L"Failed to set audio output audio sub type (PCM).");*/
-
-    /*IMFMediaSink *pAudioRenderer = NULL;
-    IMFSinkWriter *pSink = NULL;
-    IMFStreamSink *pStreamSink = NULL;
-    IMFMediaTypeHandler *pMediaTypeHandler = NULL;
-    IMFMediaType *pMediaType = NULL;*/
-
-    //EIF(MFCreateAudioRenderer(NULL, &pAudioRenderer));
-    CHECK_HR(pAudioSink->GetStreamSinkByIndex(0, &pStreamSink), L"Failed to get audio renderer stream by index.");
-
-    CHECK_HR(pStreamSink->GetMediaTypeHandler(&pMediaTypeHandler), L"Failed to get media type handler.");
-
-    /*CHECK_HR(pMediaTypeHandler->GetMediaTypeCount(&mediaTypeCount), L"Failed to get media type count.");
-
-    printf("Media type count %i.\n", mediaTypeCount);
-
-    for (int index = 0; index < mediaTypeCount; index++)
-    {
-      CHECK_HR(pMediaTypeHandler->GetMediaTypeByIndex(index, &pSinkMediaType), L"Failed to get sink media type.");
-      Console::WriteLine(GetMediaTypeDescription(pSinkMediaType));
-    }*/
-
-    //CHECK_HR(pMediaTypeHandler->GetCurrentMediaType(&pSinkMediaType), L"Failed to get sink media type.");
-
-    //CHECK_HR(MFCreateMediaType(&pMediaType), L"Failed to instantiate media type.");
-    //CHECK_HR(pMediaType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio), L"Failed to set major media type to audio.");
-    //CHECK_HR(pMediaType->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM), L"Failed to set sub type to PCM.");
-    //CHECK_HR(pMediaType->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, 2), L"Failed to set number audio channels.");
-    //CHECK_HR(pMediaType->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, 22050), L"Failed to set samples per second.");
-    //CHECK_HR(pMediaType->SetUINT32(MF_MT_AUDIO_BLOCK_ALIGNMENT, 4), L"Failed to set audio block alignment.");
-    //CHECK_HR(pMediaType->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, 88200), L"Failed to set average bytes per second.");
-    //CHECK_HR(pMediaType->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16), L"Failed to set audio bits per sample.");
-    //CHECK_HR(pMediaType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE), L"Failed to set all samples independent.");
-
-    CHECK_HR(pMediaTypeHandler->GetMediaTypeByIndex(2, &pSinkMediaType), L"Failed to get sink media type.");
-    std::cout << GetMediaTypeDescription(pSinkMediaType) << std::endl;
-
-    CHECK_HR(pMediaTypeHandler->SetCurrentMediaType(pSinkMediaType), L"Failed to set current media type.");
-
-    //EIF(MFCreateSinkWriterFromMediaSink(pAudioRenderer, NULL, &pSink));
-
-    CHECK_HR(MFCreateSinkWriterFromMediaSink(pAudioSink, NULL, &pSinkWriter), L"Failed to create sink writer from audio sink.");
-
-    //MFCreateSinkWriterFromMediaSink(pAudioSink, NULL, &pSinkWriter);
-
-    //pEnum->Release();
-    //pDevices->Release();
-    //pDevice->Release();
-    //pAttributes->Release();
-    //CoTaskMemFree(wstrID);
-
-    if (_sourceReader == NULL) {
-      return -1;
-    }
-    else {
-
-      printf("Commencing audio play.\n");
-
-      IMFSample* audioSample = NULL;
-      DWORD streamIndex, flags;
-      LONGLONG llVideoTimeStamp;
-
-      for (int index = 0; index < 10; index++)
-        //while (true)
-      {
-        // Initial read results in a null pSample??
-        CHECK_HR(_sourceReader->ReadSample(
-          MF_SOURCE_READER_FIRST_AUDIO_STREAM,
-          0,                              // Flags.
-          &streamIndex,                   // Receives the actual stream index. 
-          &flags,                         // Receives status flags.
-          &llVideoTimeStamp,                   // Receives the time stamp.
-          &audioSample                        // Receives the sample or NULL.
-        ), L"Error reading audio sample.");
-
-        if (flags & MF_SOURCE_READERF_ENDOFSTREAM)
-        {
-          wprintf(L"\tEnd of stream\n");
-          break;
-        }
-        if (flags & MF_SOURCE_READERF_NEWSTREAM)
-        {
-          wprintf(L"\tNew stream\n");
-        }
-        if (flags & MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED)
-        {
-          wprintf(L"\tNative type changed\n");
-        }
-        if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED)
-        {
-          wprintf(L"\tCurrent type changed\n");
-
-          IMFMediaType* audioType = NULL;
-          CHECK_HR(_sourceReader->GetCurrentMediaType(
-            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM,
-            &audioType), L"Error retrieving current media type from first audio stream.");
-
-          std::cout << GetMediaTypeDescription(audioType) << std::endl;
-
-          audioType->Release();
-        }
-        if (flags & MF_SOURCE_READERF_STREAMTICK)
-        {
-          wprintf(L"\tStream tick\n");
-
-          pSinkWriter->SendStreamTick(0, llVideoTimeStamp);
-        }
-
-        if (!audioSample)
-        {
-          printf("Failed to get audio sample from MF.\n");
-        }
-        else
-        {
-          CHECK_HR(audioSample->SetSampleTime(llVideoTimeStamp), L"Error setting the audio sample time.");
-
-          //DWORD nCurrBufferCount = 0;
-          //CHECK_HR(audioSample->GetBufferCount(&nCurrBufferCount), L"Failed to get the buffer count from the audio sample.\n");
-
-          //printf("Buffer count %i.\n", nCurrBufferCount);
-
-          CHECK_HR(pSinkWriter->WriteSample(0, audioSample), L"The stream sink writer was not happy with the sample.");
-          //CHECK_HR(pStreamSink->ProcessSample(audioSample), L"The stream sink was not happy with the sample.");
-
-          //IMFMediaBuffer * pMediaBuffer;
-          //CHECK_HR(audioSample->ConvertToContiguousBuffer(&pMediaBuffer), L"Failed to extract the audio sample into a raw buffer.\n");
-
-          //DWORD nCurrLen = 0;
-          //CHECK_HR(pMediaBuffer->GetCurrentLength(&nCurrLen), L"Failed to get the length of the raw buffer holding the audio sample.\n");
-
-          //byte *audioBuff;
-          //DWORD buffCurrLen = 0;
-          //DWORD buffMaxLen = 0;
-          //pMediaBuffer->Lock(&audioBuff, &buffMaxLen, &buffCurrLen);
-
-          /*buffer = gcnew array<Byte>(buffCurrLen);
-          //Marshal::Copy((IntPtr)audioBuff, buffer, 0, buffCurrLen);*/
-
-          //pMediaBuffer->Unlock();
-          //pMediaBuffer->Release();
-
-          //audioSample->Release();
-
-          //return S_OK;
-        }
-      }
     }
   }
 

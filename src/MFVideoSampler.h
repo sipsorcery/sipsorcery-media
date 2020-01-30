@@ -129,10 +129,8 @@ namespace SIPSorceryMedia {
 		HRESULT InitFromFile(String^ path);
 		HRESULT FindVideoMode(IMFSourceReader *pReader, const GUID mediaSubType, UInt32 width, UInt32 height, /* out */ IMFMediaType *&foundpType);
     MediaSampleProperties^ GetSample(/* out */ array<Byte> ^% buffer);
-		HRESULT GetAudioSample(/* out */ array<Byte> ^% buffer);
-    MediaSampleProperties^ GetNextSample(/* out */ array<Byte> ^% buffer);
-		HRESULT PlayAudio();
 		void Stop();
+		HRESULT SetStreamIndexes();
 
 		property int Width {
 			int get() { return _width; }
@@ -157,6 +155,7 @@ namespace SIPSorceryMedia {
 		DWORD videoStreamIndex;
 		int _width, _height, _stride;
 		int _audioStreamIndex = -1, _videoStreamIndex = -1;
+		bool _isLiveSource = false;
 		System::DateTime _playbackStart = System::DateTime::MinValue;
 
 		HRESULT GetDefaultStride(IMFMediaType *pType, /* out */ LONG *plStride);
