@@ -151,7 +151,6 @@ namespace SIPSorceryMedia {
 		const int TIMESTAMP_MILLISECOND_DIVISOR = 10000;	// Media sample timestamps are given in 100's of nano seconds.
 
 		IMFSourceReader * _sourceReader = NULL;
-		IMFMediaSink * _audioSink = NULL;             // Streaming audio renderer (SAR)
 		DWORD videoStreamIndex;
 		int _width, _height, _stride;
 		int _audioStreamIndex = -1, _videoStreamIndex = -1;
