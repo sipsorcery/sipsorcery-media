@@ -53,10 +53,31 @@ if (Attr == _Attribute) \
 	goto done; \
 } \
 
+template <class T> void SAFE_RELEASE(T * *ppT)
+{
+	if (*ppT)
+	{
+		(*ppT)->Release();
+		*ppT = NULL;
+	}
+}
+
+template <class T> inline void SAFE_RELEASE(T * &pT)
+{
+	if (pT != NULL)
+	{
+		pT->Release();
+		pT = NULL;
+	}
+}
+
 namespace SIPSorceryMedia {
+
+	enum class DeviceType { Audio, Video };
 
   LPCSTR STRING_FROM_GUID(GUID Attr);
   std::string GetMediaTypeDescription(IMFMediaType * pMediaType);
+	HRESULT GetSourceFromCaptureDevice(DeviceType deviceType, UINT nDevice, IMFMediaSource** ppMediaSource, IMFSourceReader** ppMediaReader);
 
 	/* Used to describe the modes of the attached video devices. */
 	public ref class VideoMode

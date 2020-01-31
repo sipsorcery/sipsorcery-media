@@ -122,78 +122,82 @@ namespace SIPSorceryMedia {
   HRESULT MFVideoSampler::Init(int videoDeviceIndex, VideoSubTypesEnum videoSubType, UInt32 width, UInt32 height)
   {
     const GUID MF_INPUT_FORMAT = VideoSubTypesHelper::GetGuidForVideoSubType(videoSubType);
-    IMFMediaSource* videoSource = NULL;
-    UINT32 videoDeviceCount = 0;
+    IMFMediaSource* pVideoSource = NULL, * pAudioSource = NULL;
+    IMFMediaSource* pAggSource = NULL;
+    IMFCollection* pCollection = NULL;
     IMFAttributes* videoConfig = NULL;
-    IMFActivate** videoDevices = NULL;
     IMFMediaType* videoType = NULL;
-    IMFMediaType* desiredInputVideoType = NULL;
+    IMFMediaType* desiredInputVideoType = NULL, * pAudioOutType = NULL;
 
     _width = width;
     _height = height;
     _isLiveSource = true;
 
-    // Create an attribute store to hold the search criteria.
-    CHECK_HR(MFCreateAttributes(&videoConfig, 1), L"Error creating video configuration.");
+    // Get the sources for the video and audio capture devices.
 
-    // Request video capture devices.
-    CHECK_HR(videoConfig->SetGUID(
-      MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
-      MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID), L"Error initialising video configuration object.");
+    CHECK_HR(GetSourceFromCaptureDevice(DeviceType::Video, videoDeviceIndex, &pVideoSource, nullptr),
+      L"Failed to get video source and reader.");
 
-    // Enumerate the devices,
-    CHECK_HR(MFEnumDeviceSources(videoConfig, &videoDevices, &videoDeviceCount), L"Error enumerating video devices.");
+    CHECK_HR(GetSourceFromCaptureDevice(DeviceType::Audio, 0, &pAudioSource, nullptr),
+      L"Failed to get video source and reader.");
 
-    printf("Video device Count: %i.\n", videoDeviceCount);
+    // Combine the two into an aggregate source and create a reader.
 
-    if (videoDeviceIndex >= videoDeviceCount) {
-      printf("Video device index %i is invalid.\n", videoDeviceIndex);
-      return false;
+    CHECK_HR(MFCreateCollection(&pCollection), L"Failed to create source collection.");
+    CHECK_HR(pCollection->AddElement(pVideoSource), L"Failed to add video source to collection.");
+    CHECK_HR(pCollection->AddElement(pAudioSource), L"Failed to add audio source to collection.");
+
+    CHECK_HR(MFCreateAggregateSource(pCollection, &pAggSource),
+      L"Failed to create aggregate source.");
+
+    // Create the source readers. Need to pin the video reader as it's a managed resource being access by native code.
+    cli::pin_ptr<IMFSourceReader*> pinnedVideoReader = &_sourceReader;
+
+    CHECK_HR(MFCreateSourceReaderFromMediaSource(
+      pAggSource,
+      videoConfig,
+      reinterpret_cast<IMFSourceReader**>(pinnedVideoReader)), L"Error creating video source reader.");
+
+    FindVideoMode(_sourceReader, MF_INPUT_FORMAT, width, height, desiredInputVideoType);
+
+    if (desiredInputVideoType == NULL) {
+      printf("The specified media type could not be found for the MF video reader.\n");
     }
     else {
+      CHECK_HR(_sourceReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, desiredInputVideoType),
+        L"Error setting video reader media type.\n");
 
-      // Request video capture device.
-      CHECK_HR(videoDevices[videoDeviceIndex]->ActivateObject(IID_PPV_ARGS(&videoSource)), L"Error activating video device.");
+      CHECK_HR(_sourceReader->GetCurrentMediaType(
+        (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+        &videoType), L"Error retrieving current media type from first video stream.");
 
-      // Create the source readers. Need to pin the video reader as it's a managed resource being access by native code.
-      cli::pin_ptr<IMFSourceReader*> pinnedVideoReader = &_sourceReader;
+      long stride = -1;
+      CHECK_HR(GetDefaultStride(videoType, &stride), L"There was an error retrieving the stride for the media type.");
+      _stride = (int)stride;
 
-      CHECK_HR(MFCreateSourceReaderFromMediaSource(
-        videoSource,
-        videoConfig,
-        reinterpret_cast<IMFSourceReader**>(pinnedVideoReader)), L"Error creating video source reader.");
-
-      FindVideoMode(_sourceReader, MF_INPUT_FORMAT, width, height, desiredInputVideoType);
-
-      if (desiredInputVideoType == NULL) {
-        printf("The specified media type could not be found for the MF video reader.\n");
-      }
-      else {
-        CHECK_HR(_sourceReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, desiredInputVideoType),
-          L"Error setting video reader media type.\n");
-
-        CHECK_HR(_sourceReader->GetCurrentMediaType(
-          (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-          &videoType), L"Error retrieving current media type from first video stream.");
-
-        long stride = -1;
-        CHECK_HR(GetDefaultStride(videoType, &stride), L"There was an error retrieving the stride for the media type.");
-        _stride = (int)stride;
-
-        Console::WriteLine("Webcam Video Description:");
-        std::cout << GetMediaTypeDescription(videoType) << std::endl;
-      }
-
-      videoConfig->Release();
-      videoSource->Release();
-      videoType->Release();
-      desiredInputVideoType->Release();
-
-      // Iterate through the source reader streams to identify the audio and video stream indexes.
-      CHECK_HR(SetStreamIndexes(), "Failed to set stream indexes.");
-
-      return S_OK;
+      Console::WriteLine("Webcam Video Description:");
+      std::cout << GetMediaTypeDescription(videoType) << std::endl;
     }
+
+    CHECK_HR(MFCreateMediaType(&pAudioOutType), "Failed to create media type.");
+    CHECK_HR(pAudioOutType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio), "Failed to set output media major type.");
+    CHECK_HR(pAudioOutType->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM), "Failed to set output audio sub type (PCM).");
+    CHECK_HR(pAudioOutType->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, 1), "Failed to set audio output to mono.");
+    CHECK_HR(pAudioOutType->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16), "Failed to set audio bits per sample.");
+    CHECK_HR(pAudioOutType->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, 8000), "Failed to set audio samples per second.");
+
+    CHECK_HR(_sourceReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, NULL, pAudioOutType),
+      "Failed to set audio media type on source reader.");
+
+    //videoConfig->Release();
+    pAggSource->Release();
+    videoType->Release();
+    desiredInputVideoType->Release();
+
+    // Iterate through the source reader streams to identify the audio and video stream indexes.
+    CHECK_HR(SetStreamIndexes(), "Failed to set stream indexes.");
+
+    return S_OK;
   }
 
   HRESULT MFVideoSampler::InitFromFile(String^ path)
@@ -321,29 +325,26 @@ namespace SIPSorceryMedia {
   */
   HRESULT MFVideoSampler::SetStreamIndexes()
   {
-    HRESULT getStreamRes = S_OK;
+    DWORD stmIndex = 0;
+    BOOL isSelected = false;
 
-    for (int i = 0; i < MAX_STREAM_INDEX && getStreamRes == S_OK; i++) {
-      BOOL isSelected = false;
-      getStreamRes = _sourceReader->GetStreamSelection(i, &isSelected);
-      if (getStreamRes == S_OK && isSelected) {
+    while (_sourceReader->GetStreamSelection(stmIndex, &isSelected) == S_OK && stmIndex < MAX_STREAM_INDEX) {
+      if (isSelected) {
         IMFMediaType* pTestType = NULL;
-        CHECK_HR(_sourceReader->GetCurrentMediaType(i, &pTestType), "Failed to get media type for selected stream.");
+        CHECK_HR(_sourceReader->GetCurrentMediaType(stmIndex, &pTestType), "Failed to get media type for selected stream.");
         GUID majorMediaType;
         pTestType->GetGUID(MF_MT_MAJOR_TYPE, &majorMediaType);
         if (majorMediaType == MFMediaType_Audio) {
-          std::cout << "Audio stream index is " << i << "." << std::endl;
-          _audioStreamIndex = i;
+          std::cout << "Audio stream index is " << stmIndex << "." << std::endl;
+          _audioStreamIndex = stmIndex;
         }
         else if (majorMediaType == MFMediaType_Video) {
-          std::cout << "Video stream index is " << i << "." << std::endl;
-          _videoStreamIndex = i;
+          std::cout << "Video stream index is " << stmIndex << "." << std::endl;
+          _videoStreamIndex = stmIndex;
         }
         pTestType->Release();
       }
-      else if(getStreamRes != S_OK){
-        break;
-      } 
+      stmIndex++;
     }
 
     return S_OK;
@@ -1003,5 +1004,84 @@ namespace SIPSorceryMedia {
   done:
 
     return description;
+  }
+
+  /**
+* Gets an audio or video source reader from a capture device such as a webcam or microphone.
+* @param[in] deviceType: the type of capture device to get a source reader for.
+* @param[in] nDevice: the capture device index to attempt to get the source reader for.
+* @param[out] ppMediaSource: will be set with the source for the reader if successful.
+* @param[out] ppVMediaReader: will be set with the reader if successful. Set this parameter
+*  to nullptr if no reader is required and only the source is needed.
+* @@Returns S_OK if successful or an error code if not.
+*/
+  HRESULT GetSourceFromCaptureDevice(DeviceType deviceType, UINT nDevice, IMFMediaSource** ppMediaSource, IMFSourceReader** ppMediaReader)
+  {
+    UINT32 captureDeviceCount = 0;
+    IMFAttributes* pDeviceConfig = NULL;
+    IMFActivate** ppCaptureDevices = NULL;
+    WCHAR* deviceFriendlyName;
+    UINT nameLength = 0;
+    IMFAttributes* pAttributes = NULL;
+
+    HRESULT hr = S_OK;
+
+    hr = MFCreateAttributes(&pDeviceConfig, 1);
+    CHECK_HR(hr, "Error creating capture device configuration.");
+
+    GUID captureType = (deviceType == DeviceType::Audio) ?
+      MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_GUID :
+      MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID;
+
+    // Request video capture devices.
+    hr = pDeviceConfig->SetGUID(
+      MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+      captureType);
+    CHECK_HR(hr, "Error initialising capture device configuration object.");
+
+    hr = MFEnumDeviceSources(pDeviceConfig, &ppCaptureDevices, &captureDeviceCount);
+    CHECK_HR(hr, "Error enumerating capture devices.");
+
+    if (nDevice >= captureDeviceCount) {
+      printf("The device index of %d was invalid for available device count of %d.\n", nDevice, captureDeviceCount);
+      hr = E_INVALIDARG;
+    }
+    else {
+      hr = ppCaptureDevices[nDevice]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, &deviceFriendlyName, &nameLength);
+      CHECK_HR(hr, "Error retrieving video device friendly name.\n");
+
+      wprintf(L"Capture device friendly name: %s\n", deviceFriendlyName);
+
+      hr = ppCaptureDevices[nDevice]->ActivateObject(IID_PPV_ARGS(ppMediaSource));
+      CHECK_HR(hr, "Error activating capture device.");
+
+      // Is a reader required or does the caller only want the source?
+      if (ppMediaReader != nullptr) {
+        CHECK_HR(MFCreateAttributes(&pAttributes, 1),
+          "Failed to create attributes.");
+
+        if (deviceType == DeviceType::Video) {
+          // Adding this attribute creates a video source reader that will handle
+          // colour conversion and avoid the need to manually convert between RGB24 and RGB32 etc.
+          CHECK_HR(pAttributes->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1),
+            "Failed to set enable video processing attribute.");
+        }
+
+        // Create a source reader.
+        hr = MFCreateSourceReaderFromMediaSource(
+          *ppMediaSource,
+          pAttributes,
+          ppMediaReader);
+        CHECK_HR(hr, "Error creating media source reader.");
+      }
+    }
+
+  done:
+
+    SAFE_RELEASE(pDeviceConfig);
+    SAFE_RELEASE(ppCaptureDevices);
+    SAFE_RELEASE(pAttributes);
+
+    return hr;
   }
 }
