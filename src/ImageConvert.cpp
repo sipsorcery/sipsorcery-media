@@ -22,8 +22,8 @@ namespace SIPSorceryMedia {
 
 	int ImageConvert::ConvertRGBtoYUV(unsigned char* bmp, VideoSubTypesEnum rgbInputFormat, int width, int height, int stride, VideoSubTypesEnum yuvOutputFormat, /* out */ array<Byte> ^% buffer)
 	{
-		AVPixelFormat rgbPixelFormat = VideoSubTypesHelper::GetPixelFormatForVideoSubType(rgbInputFormat);
-		AVPixelFormat yuvPixelFormat = VideoSubTypesHelper::GetPixelFormatForVideoSubType(yuvOutputFormat);
+		AVPixelFormat rgbPixelFormat = VideoSubTypes::GetPixelFormatForVideoSubType(rgbInputFormat);
+		AVPixelFormat yuvPixelFormat = VideoSubTypes::GetPixelFormatForVideoSubType(yuvOutputFormat);
 
 		_swsContextRGBToYUV = sws_getCachedContext(_swsContextRGBToYUV, width, height, rgbPixelFormat, width, height, yuvPixelFormat, SWS_BILINEAR, NULL, NULL, NULL);
 
@@ -60,8 +60,8 @@ namespace SIPSorceryMedia {
 
 	int ImageConvert::ConvertYUVToRGB(unsigned char* yuv, VideoSubTypesEnum yuvInputFormat, int width, int height, VideoSubTypesEnum rgbOutputFormat, /* out */ array<Byte> ^% buffer)
 	{
-		AVPixelFormat yuvPixelFormat = VideoSubTypesHelper::GetPixelFormatForVideoSubType(yuvInputFormat);
-		AVPixelFormat rgbPixelFormat = VideoSubTypesHelper::GetPixelFormatForVideoSubType(rgbOutputFormat);
+		AVPixelFormat yuvPixelFormat = VideoSubTypes::GetPixelFormatForVideoSubType(yuvInputFormat);
+		AVPixelFormat rgbPixelFormat = VideoSubTypes::GetPixelFormatForVideoSubType(rgbOutputFormat);
 
 		_swsContextYUVToRGB = sws_getCachedContext(_swsContextYUVToRGB, width, height, yuvPixelFormat, width, height, rgbPixelFormat, SWS_BILINEAR, NULL, NULL, NULL);
 
