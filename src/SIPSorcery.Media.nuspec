@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>3.0.2</version>
+    <version>4.0.8-rc</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -11,13 +11,14 @@
     <projectUrl>https://github.com/sipsorcery/sipsorcery-media</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
     <description>The SIPSorcery package for audio and video capabiltities.</description>
-	<releaseNotes>- v3.0.2: Bug fix setting video sample avaialble in MFVideoSampler.
+	<releaseNotes>- v4.0.8-pre: Refactor and cleanup for improved WebRTC support.
+- v3.0.2: Bug fix setting video sample avaialble in MFVideoSampler.
 - v3.0.1: Changed .Net target to v4.5.2.
 - v3.0.0: Tweaked nuget package to remove build warnings due to mismatched platform reference.
 </releaseNotes>
     <copyright>Copyright (c) 2019-2020 Aaron Clauson</copyright>
     <language>en-US</language>
-    <tags>WebRTC MediaFoundation</tags>
+    <tags>WebRTC MediaFoundation DTLS SRTP</tags>
 	<repository type="git" url="https://github.com/sipsorcery/sipsorcery-media" branch="master" />
   </metadata>
   <files>
