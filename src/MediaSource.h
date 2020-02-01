@@ -49,6 +49,10 @@ using namespace System::Runtime::InteropServices;
 
 namespace SIPSorceryMedia {
 
+	/**
+	* Represents a source of audio and/or video samples. The source can be 
+	* from live capture devices for from a file.
+	*/
 	public ref class MediaSource
 	{
 	public:
@@ -75,8 +79,7 @@ namespace SIPSorceryMedia {
 		}
 
 		/*
-		* Default constructor. An Init overload needs to be called
-		* before sampling can start.
+		* Default constructor.
 		*/
 		MediaSource();
 
@@ -87,10 +90,12 @@ namespace SIPSorceryMedia {
 
 		/*
 		* Initialises the media source reader with an MP4 file.
-		* @param[in] path: The path to the MP4 file to load.
+		* @param[in] path: the path to the MP4 file to load.
+		* @param[in] loop: if true then the source should loop back to the start
+		*  when the end is reached.
 		* @@Returns: S_OK if successful or throw if a failure occurs.
 		*/
-		HRESULT Init(String^ path);
+		HRESULT Init(String^ path, bool loop);
 
 		/*
 		* Initialises the media source reader with audio and video capture devices.
@@ -156,7 +161,9 @@ namespace SIPSorceryMedia {
 		int _width, _height, _stride;
 		int _audioStreamIndex = -1, _videoStreamIndex = -1;
 		bool _isLiveSource = false;
-		System::DateTime _playbackStart = System::DateTime::MinValue;
+		bool _loop = false;
+		LONGLONG _prevSampleTs = 0;
+		std::chrono::time_point<std::chrono::steady_clock>* _previousSampleAt = nullptr;
 	};
 }
 

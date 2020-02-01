@@ -153,7 +153,7 @@ namespace SIPSorceryMedia {
   /*
   * Initialises the media source using an MP4 file.
   */
-  HRESULT MediaSource::Init(String^ path)
+  HRESULT MediaSource::Init(String^ path, bool loop)
   {
     MF_OBJECT_TYPE ObjectType = MF_OBJECT_INVALID;
 
@@ -167,6 +167,7 @@ namespace SIPSorceryMedia {
     try {
 
       std::wstring pathNative = msclr::interop::marshal_as<std::wstring>(path);
+      _loop = loop;
 
       // Create the source resolver.
       CHECKHR_THROW(MFCreateSourceResolver(&pSourceResolver), "MFCreateSourceResolver failed.");
@@ -294,15 +295,12 @@ namespace SIPSorceryMedia {
     else {
 
       IMFSample* pSample = nullptr;
+      IMFMediaBuffer* pVideoBuffer;
       IMFMediaType* pVideoType = nullptr;
 
       try {
         DWORD streamIndex, flags;
         LONGLONG sampleTimestamp;
-
-        if (_playbackStart == System::DateTime::MinValue) {
-          _playbackStart = System::DateTime::Now;
-        }
 
         CHECKHR_THROW(_sourceReader->ReadSample(
           MF_SOURCE_READER_ANY_STREAM,
@@ -317,112 +315,142 @@ namespace SIPSorceryMedia {
         {
           std::cout << "End of stream." << std::endl;
           sampleProps->EndOfStream = true;
+
+          if (_loop) {
+            std::cout << "resetting media source position to start." << std::endl;
+
+            PROPVARIANT var = { 0 };
+            var.vt = VT_I8;
+            CHECKHR_THROW(_sourceReader->SetCurrentPosition(GUID_NULL, var),
+              "Failed to set source reader position.");
+
+            CHECKHR_THROW(_sourceReader->Flush(_audioStreamIndex),
+              "Failed to flush the audio stream.");
+
+            CHECKHR_THROW(_sourceReader->Flush(_videoStreamIndex),
+              "Failed to flush the video stream.");
+
+            _prevSampleTs = 0;
+          }
+        }
+
+        if (flags & MF_SOURCE_READERF_NEWSTREAM)
+        {
+          std::cout << "New stream." << std::endl;
+        }
+
+        if (flags & MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED)
+        {
+          std::cout << "Native type changed." << std::endl;
+        }
+
+        if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED)
+        {
+          std::cout << "Current type changed for stream index " << streamIndex << "." << std::endl;
+
+          if (streamIndex == _videoStreamIndex) {
+            CHECKHR_THROW(_sourceReader->GetCurrentMediaType(
+              (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+              &pVideoType), "Error retrieving current media type from first video stream.");
+
+            std::cout << GetMediaTypeDescription(pVideoType) << std::endl;
+
+            // Get the frame dimensions and stride
+            UINT32 nWidth, nHeight;
+            MFGetAttributeSize(pVideoType, MF_MT_FRAME_SIZE, &nWidth, &nHeight);
+            _width = nWidth;
+            _height = nHeight;
+
+            LONG lFrameStride;
+            pVideoType->GetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32*)&lFrameStride);
+            _stride = lFrameStride;
+
+            sampleProps->Width = nWidth;
+            sampleProps->Height = nHeight;
+            sampleProps->Stride = lFrameStride;
+
+            SAFE_RELEASE(pVideoType);
+          }
+        }
+
+        if (flags & MF_SOURCE_READERF_STREAMTICK)
+        {
+          std::cout << "Stream tick." << std::endl;
+        }
+
+        if (pSample == nullptr)
+        {
+          std::cout << "Failed to get media sample in from source reader." << std::endl;
         }
         else
         {
-          if (flags & MF_SOURCE_READERF_NEWSTREAM)
-          {
-            std::cout << "New stream." << std::endl;
+          //std::cout << "Stream index " << streamIndex << ", timestamp " <<  sampleTimestamp << ", flags " << flags << "." << std::endl;
+
+          sampleProps->Timestamp = sampleTimestamp;
+          sampleProps->NowMilliseconds = std::chrono::milliseconds(std::time(NULL)).count();
+
+          DWORD nCurrBufferCount = 0;
+          CHECKHR_THROW(pSample->GetBufferCount(&nCurrBufferCount), "Failed to get the buffer count from the media sample.");
+          sampleProps->FrameCount = nCurrBufferCount;
+
+          CHECKHR_THROW(pSample->ConvertToContiguousBuffer(&pVideoBuffer), "Failed to extract the media sample into a raw buffer.");
+
+          DWORD nCurrLen = 0;
+          CHECKHR_THROW(pVideoBuffer->GetCurrentLength(&nCurrLen), "Failed to get the length of the raw buffer holding the media sample.");
+
+          byte* imgBuff;
+          DWORD buffCurrLen = 0;
+          DWORD buffMaxLen = 0;
+          pVideoBuffer->Lock(&imgBuff, &buffMaxLen, &buffCurrLen);
+
+          buffer = gcnew array<Byte>(buffCurrLen);
+          Marshal::Copy((IntPtr)imgBuff, buffer, 0, buffCurrLen);
+
+          pVideoBuffer->Unlock();
+
+          if (streamIndex == _videoStreamIndex) {
+            sampleProps->Width = _width;
+            sampleProps->Height = _height;
+            sampleProps->Stride = _stride;
+            sampleProps->HasVideoSample = true;
           }
-          if (flags & MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED)
-          {
-            std::cout << "Native type changed." << std::endl;
+          else if (streamIndex == _audioStreamIndex) {
+            sampleProps->HasAudioSample = true;
           }
-          if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED)
-          {
-            std::cout << "Current type changed for stream index " << streamIndex << "." << std::endl;
 
-            if (streamIndex == _videoStreamIndex) {
-              CHECKHR_THROW(_sourceReader->GetCurrentMediaType(
-                (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-                &pVideoType), "Error retrieving current media type from first video stream.");
+          if (!_isLiveSource && (sampleProps->HasAudioSample || sampleProps->HasVideoSample)) {
 
-              std::cout << GetMediaTypeDescription(pVideoType) << std::endl;
+            LONGLONG samplePeriodMs = 0;
+            LONGLONG wallclockPeriodMs = 0;
 
-              // Get the frame dimensions and stride
-              UINT32 nWidth, nHeight;
-              MFGetAttributeSize(pVideoType, MF_MT_FRAME_SIZE, &nWidth, &nHeight);
-              _width = nWidth;
-              _height = nHeight;
-
-              LONG lFrameStride;
-              pVideoType->GetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32*)&lFrameStride);
-              _stride = lFrameStride;
-
-              sampleProps->Width = nWidth;
-              sampleProps->Height = nHeight;
-              sampleProps->Stride = lFrameStride;
-
-              SAFE_RELEASE(pVideoType);
+            if (_previousSampleAt == nullptr) {
+              _previousSampleAt = new std::chrono::time_point<std::chrono::steady_clock>;
             }
-          }
-          if (flags & MF_SOURCE_READERF_STREAMTICK)
-          {
-            std::cout << "Stream tick." << std::endl;
-          }
-
-          if (pSample == nullptr)
-          {
-            std::cout << "Failed to get media sample in from source reader." << std::endl;
-          }
-          else
-          {
-            //std::cout << "Stream index " << streamIndex << ", timestamp " <<  sampleTimestamp << ", flags " << flags << "." << std::endl;
-
-            sampleProps->Timestamp = sampleTimestamp;
-            sampleProps->NowMilliseconds = std::chrono::milliseconds(std::time(NULL)).count();
-
-            DWORD nCurrBufferCount = 0;
-            CHECKHR_THROW(pSample->GetBufferCount(&nCurrBufferCount), "Failed to get the buffer count from the media sample.");
-            sampleProps->FrameCount = nCurrBufferCount;
-
-            IMFMediaBuffer* pVideoBuffer;
-            CHECKHR_THROW(pSample->ConvertToContiguousBuffer(&pVideoBuffer), "Failed to extract the media sample into a raw buffer.");
-
-            DWORD nCurrLen = 0;
-            CHECKHR_THROW(pVideoBuffer->GetCurrentLength(&nCurrLen), "Failed to get the length of the raw buffer holding the media sample.");
-
-            byte* imgBuff;
-            DWORD buffCurrLen = 0;
-            DWORD buffMaxLen = 0;
-            pVideoBuffer->Lock(&imgBuff, &buffMaxLen, &buffCurrLen);
-
-            buffer = gcnew array<Byte>(buffCurrLen);
-            Marshal::Copy((IntPtr)imgBuff, buffer, 0, buffCurrLen);
-
-            pVideoBuffer->Unlock();
-            SAFE_RELEASE(pVideoBuffer);
-            SAFE_RELEASE(pSample);
-
-            if (streamIndex == _videoStreamIndex) {
-              sampleProps->Width = _width;
-              sampleProps->Height = _height;
-              sampleProps->Stride = _stride;
-              sampleProps->HasVideoSample = true;
-            }
-            else if (streamIndex == _audioStreamIndex) {
-              sampleProps->HasAudioSample = true;
+            else {
+              samplePeriodMs = (sampleTimestamp - _prevSampleTs) / TIMESTAMP_MILLISECOND_DIVISOR;
+              wallclockPeriodMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - *_previousSampleAt).count();
             }
 
-            if (!_isLiveSource && (sampleProps->HasAudioSample || sampleProps->HasVideoSample)) {
+            //printf("Samples timestamp %I64d, current timestamp %I64d.\n", sampleTimestamp / 10000, samplePeriodMs);
 
-              auto currentPlaybackTimestamp = (Int64)(System::DateTime::Now - _playbackStart).TotalMilliseconds;
-
-              //printf("Samples timestamp %I64d, current timestamp %I64d.\n", sampleTimestamp / 10000, currentPlaybackTimestamp);
-
-              if (sampleTimestamp / TIMESTAMP_MILLISECOND_DIVISOR > currentPlaybackTimestamp)
-              {
-                //printf("Sleeping for %I64d.\n", sampleTimestamp / 10000 - currentPlaybackTimestamp);
-                Sleep(sampleTimestamp / TIMESTAMP_MILLISECOND_DIVISOR - currentPlaybackTimestamp);
-              }
+            if (samplePeriodMs > 0 && samplePeriodMs > wallclockPeriodMs)
+            {
+              LONGLONG sleepMs = samplePeriodMs - wallclockPeriodMs;
+              //printf("Sleeping for %I64dms.\n", sleepMs);
+              Sleep(sleepMs);
             }
           }
-        } // End of sample.
+
+          _prevSampleTs = sampleTimestamp;
+          *_previousSampleAt = std::chrono::steady_clock::now();
+
+        }
 
         return sampleProps;
       }
       finally {
         SAFE_RELEASE(pVideoType);
+        SAFE_RELEASE(pVideoBuffer);
         SAFE_RELEASE(pSample);
       }
     }
@@ -531,7 +559,7 @@ namespace SIPSorceryMedia {
             videoMode->VideoSubType = VideoSubTypes::GetVideoSubTypeForGuid(videoSubType);
             devices->Add(videoMode);
           }
-       
+
           ++dwMediaTypeIndex;
           SAFE_RELEASE(pType);
         }
