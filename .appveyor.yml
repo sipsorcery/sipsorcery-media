@@ -51,8 +51,18 @@ after_build:
 - ps: |
        Write-Host "APPVEYOR_REPO_TAG=$env:APPVEYOR_REPO_TAG."
        Write-Host "APPVEYOR_JOB_NUMBER=$env:APPVEYOR_JOB_NUMBER."
+       
+       if($env:APPVEYOR_JOB_NUMBER -eq 2) {
+         mkdir c:\build
+         xcopy /T /E src\Win32 c:\build
+         dir c:\build\Win32
+         dir c:\build\Win32\Release
+       }
+       
        #if((Test-Path -Path ('src\Win32')) -and (Test-Path -Path ('src\x64'))) {
        if($env:APPVEYOR_JOB_NUMBER -eq 2) {
+         mkdir src\Win32
+         xcopy /T /E c:\build src\Win32 
          nuget pack src\SIPSorcery.Media.nuspec
          dir src\*.nupkg
        }
