@@ -32,8 +32,8 @@ install:
       vcpkg integrate install
 build_script:
 - ps: |
-      msbuild /m SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=Win32 /t:clean,build
-      msbuild /m SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=x64 /t:clean,build
+      msbuild /m src\SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=Win32 /t:clean,build
+      msbuild /m src\SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=x64 /t:clean,build
 after_build:
 #- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
 - ps: |
