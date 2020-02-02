@@ -14,7 +14,7 @@ install:
       WRITE-HOST "vcpkg triplet $env:TRIPLET"
       $env:PACKAGES = Get-Content -Path vcpkg-packages.txt
       Write-Host "vcpkg list: $env:PACKAGES"
-      if(1) {
+      if(0) {
       #if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
           Add-Content "C:\tools\vcpkg\triplets\x86-windows.cmake" "set(VCPKG_BUILD_TYPE release)"
           Add-Content "C:\tools\vcpkg\triplets\x64-windows.cmake" "set(VCPKG_BUILD_TYPE release)"
