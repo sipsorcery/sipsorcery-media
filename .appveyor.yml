@@ -42,7 +42,7 @@ after_build:
        nuget pack src\SIPSorcery.Media.nuspec
        dir src\*.nupkg
 artifacts:
-- path: 'src\*.nupkg'
+- path: '*.nupkg'
 deploy:
   - provider: NuGet
     server:                  # remove to push to NuGet.org
@@ -50,7 +50,7 @@ deploy:
       secure: MMAD8YSvIgFD6mUWB2tdEGzBNbyfW/9TeB+yN325nQ/nHJMLhv2hBYan1CU1O60z
     skip_symbols: false
     symbol_server:           # remove to push symbols to SymbolSource.org
-    artifact: 'src\*.nupkg'
+    artifact: '*.nupkg'
     on:
       APPVEYOR_REPO_TAG: true       # deploy on tag push only
   - provider: GitHub
