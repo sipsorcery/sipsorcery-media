@@ -51,7 +51,7 @@ after_build:
 - ps: |
       WRITE_HOST "APPVEYOR_REPO_TAG=$env:APPVEYOR_REPO_TAG."
 artifacts:
-- path: **\*.nupkg
+- path: 'src\*.nupkg'
 deploy:
   - provider: NuGet
     server:                  # remove to push to NuGet.org
@@ -59,11 +59,11 @@ deploy:
       secure: MMAD8YSvIgFD6mUWB2tdEGzBNbyfW/9TeB+yN325nQ/nHJMLhv2hBYan1CU1O60z
     skip_symbols: false
     symbol_server:           # remove to push symbols to SymbolSource.org
-    artifact: **\*.nupkg
+    artifact: 'src\*.nupkg'
     on:
       APPVEYOR_REPO_TAG: true       # deploy on tag push only
   - provider: GitHub
-    artifact: **\*.nupkg           # upload all NuGet packages to release assets
+    artifact: 'src\*.nupkg'           # upload all NuGet packages to release assets
     draft: true
     prerelease: true
     on:
