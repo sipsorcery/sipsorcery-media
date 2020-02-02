@@ -50,7 +50,7 @@ after_build:
 #- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
 - ps: |
        Write-Host "APPVEYOR_REPO_TAG=$env:APPVEYOR_REPO_TAG."
-       nuget pack src\Sorcery.Media.nuspec
+       nuget pack src\SIPSorcery.Media.nuspec
        dir src\*.nupkg
 artifacts:
 - path: 'src\*.nupkg'
