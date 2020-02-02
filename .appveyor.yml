@@ -13,6 +13,7 @@ environment:
     secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
 cache:
 - C:\tools\vcpkg\installed # -> vcpkg-packages.txt
+- C:\build
 for:  
  -
    matrix:
@@ -55,12 +56,14 @@ after_build:
        if($env:APPVEYOR_JOB_NUMBER -eq 1) {
          mkdir c:\build
          xcopy /T /E src\Win32 c:\build
-         dir c:\build\Win32
-         dir c:\build\Win32\Release
+         dir c:\build\
+         dir c:\build\Release
        }
        
        #if((Test-Path -Path ('src\Win32')) -and (Test-Path -Path ('src\x64'))) {
        if($env:APPVEYOR_JOB_NUMBER -eq 2) {
+         dir c:\build\
+         dir c:\build\Release
          mkdir src\Win32
          xcopy /T /E c:\build src\Win32 
          nuget pack src\SIPSorcery.Media.nuspec
