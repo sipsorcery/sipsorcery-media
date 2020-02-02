@@ -14,7 +14,7 @@ install:
       WRITE-HOST "vcpkg triplet $env:TRIPLET"
       $env:PACKAGES = Get-Content -Path vcpkg-packages.txt
       Write-Host "vcpkg list: $env:PACKAGES"
-      if(True) {
+      if(1) {
       #if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
           Add-Content "C:\tools\vcpkg\triplets\$env:TRIPLET.cmake" "set(VCPKG_BUILD_TYPE release)"
           vcpkg install --triplet x86-windows openssl libvpx libsrtp
