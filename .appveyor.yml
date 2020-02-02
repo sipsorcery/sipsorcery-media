@@ -1,32 +1,13 @@
 version: '{branch}.{build}'
 skip_tags: true
 image: Visual Studio 2019
-configuration: Release
-platform: 
- - Win32
- - x64
 environment:
   APPVEYOR_SAVE_CACHE_ON_ERROR: true
   VCPKG_INSTALL_PATH: 'c:\tools\vcpkg\installed'
-  TRIPLET: 'x86-windows'
   access_token:
     secure: 21m76jAVvcu7oACAHFnfCBltcwon+r5ZI3avfRmrNFAqJMn6RfLXwpBhPcJ617tD
 cache:
 - C:\tools\vcpkg\installed # -> vcpkg-packages.txt
-- C:\build
-for:  
- -
-   matrix:
-     only:
-       - platform: Win32
-   environment:
-     TRIPLET: 'x86-windows'
- -
-   matrix:
-     only:
-       - platform: x64
-   environment:
-     TRIPLET: 'x64-windows'
 install:
 # Powershell block below is to install the c++ dependencies via vcpkg.
 - ps: |
@@ -35,40 +16,23 @@ install:
       Write-Host "vcpkg list: $env:PACKAGES"
       if(!(Test-Path -Path ($env:VCPKG_INSTALL_PATH))) {
           Add-Content "C:\tools\vcpkg\triplets\$env:TRIPLET.cmake" "set(VCPKG_BUILD_TYPE release)"
-          vcpkg install --triplet $env:TRIPLET $env:PACKAGES.split()
+          vcpkg install --triplet x86-windows $env:PACKAGES.split()
+          vcpkg install --triplet x64-windows $env:PACKAGES.split()
       }
       else {
         Write-Host "required vcpkg packages already installed."
       }
       vcpkg integrate install
-build:
-  parallel: true
-  project: src\SIPSorceryMedia.sln
-  #publish_nuget: true
-  #publish_nuget_symbols: true
-  verbosity: quiet
+build_script:
+- ps: |
+      msbuild /m SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=Win32 /t:clean,build
+      msbuild /m SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=x64 /t:clean,build
 after_build:
 #- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
 - ps: |
        Write-Host "APPVEYOR_REPO_TAG=$env:APPVEYOR_REPO_TAG."
-       Write-Host "APPVEYOR_JOB_NUMBER=$env:APPVEYOR_JOB_NUMBER."
-       
-       if($env:APPVEYOR_JOB_NUMBER -eq 1) {
-         mkdir c:\build
-         xcopy /T /E src\Win32 c:\build
-         dir c:\build\
-         dir c:\build\Release
-       }
-       
-       #if((Test-Path -Path ('src\Win32')) -and (Test-Path -Path ('src\x64'))) {
-       if($env:APPVEYOR_JOB_NUMBER -eq 2) {
-         dir c:\build\
-         dir c:\build\Release
-         mkdir src\Win32
-         xcopy /T /E c:\build src\Win32 
-         nuget pack src\SIPSorcery.Media.nuspec
-         dir src\*.nupkg
-       }
+       nuget pack src\SIPSorcery.Media.nuspec
+       dir src\*.nupkg
 artifacts:
 - path: 'src\*.nupkg'
 deploy:
