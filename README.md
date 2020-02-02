@@ -12,7 +12,7 @@ Use `vcpkg` to install the dependencies.
     PS >.\vcpkg install --triplet x64-windows openssl libvpx ffmpeg libsrtp
 ```
 
-Open `SIPSorcery.Media\SIPSorceryMedia.vcxproj` with Visual Studio.
+Open `src\SIPSorceryMedia.sln` with Visual Studio.
 
 Deployment
 ---------------------
