@@ -43,15 +43,14 @@ install:
 build:
   parallel: true
   project: src\SIPSorceryMedia.sln
-  publish_nuget: true
-  publish_nuget_symbols: true
+  #publish_nuget: true
+  #publish_nuget_symbols: true
   verbosity: quiet
 after_build:
 #- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
 - ps: |
        Write-Host "APPVEYOR_REPO_TAG=$env:APPVEYOR_REPO_TAG."
-       dir 
-       dir src
+       nuget pack src\Sorcery.Media.nuspec
        dir src\*.nupkg
 artifacts:
 - path: 'src\*.nupkg'
@@ -69,5 +68,7 @@ deploy:
     artifact: 'src\*.nupkg'           # upload all NuGet packages to release assets
     draft: true
     prerelease: true
+    auth_token:
+      secure: E58r+OknoQn8+bsPRT6l3U2K4kfOpDiGCo1C75LkVg+R/RBHpY//J8UCXEfVvyRB
     on:
       APPVEYOR_REPO_TAG: true       # deploy on tag push only
