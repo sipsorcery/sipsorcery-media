@@ -439,11 +439,10 @@ namespace SIPSorceryMedia {
               //printf("Sleeping for %I64dms.\n", sleepMs);
               Sleep(sleepMs);
             }
+
+            _prevSampleTs = sampleTimestamp;
+            *_previousSampleAt = std::chrono::steady_clock::now();
           }
-
-          _prevSampleTs = sampleTimestamp;
-          *_previousSampleAt = std::chrono::steady_clock::now();
-
         }
 
         return sampleProps;

@@ -48,8 +48,10 @@ build:
   verbosity: quiet
 after_build:
 #- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
+- ps: |
+      WRITE_HOST "APPVEYOR_REPO_TAG=$env:APPVEYOR_REPO_TAG."
 artifacts:
-- path: /.*\.nupkg/
+- path: **\*.nupkg
 deploy:
   - provider: NuGet
     server:                  # remove to push to NuGet.org
@@ -57,15 +59,12 @@ deploy:
       secure: MMAD8YSvIgFD6mUWB2tdEGzBNbyfW/9TeB+yN325nQ/nHJMLhv2hBYan1CU1O60z
     skip_symbols: false
     symbol_server:           # remove to push symbols to SymbolSource.org
-    artifact: /.*\.nupkg/
+    artifact: **\*.nupkg
     on:
-      branch: master                # release from master branch only
       APPVEYOR_REPO_TAG: true       # deploy on tag push only
-      appveyor_repo_tag: true
   - provider: GitHub
-    artifact: /.*\.nupkg/           # upload all NuGet packages to release assets
+    artifact: **\*.nupkg           # upload all NuGet packages to release assets
     draft: true
     prerelease: true
     on:
-      branch: master                # release from master branch only
       APPVEYOR_REPO_TAG: true       # deploy on tag push only
