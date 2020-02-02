@@ -22,8 +22,8 @@ install:
           #Exit-AppveyorBuild;
           #vcpkg install --triplet x64-windows openssl libvpx libsrtp
           #Exit-AppveyorBuild;
-          vcpkg install --triplet x86-windows ffmpeg
-          Exit-AppveyorBuild;
+          #vcpkg install --triplet x86-windows ffmpeg
+          #Exit-AppveyorBuild;
           vcpkg install --triplet x64-windows ffmpeg
           Exit-AppveyorBuild;
       }
