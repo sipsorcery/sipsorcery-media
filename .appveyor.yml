@@ -50,8 +50,11 @@ after_build:
 #- 7z a bitcoin-%APPVEYOR_BUILD_VERSION%.zip %APPVEYOR_BUILD_FOLDER%\build_msvc\%platform%\%configuration%\*.exe
 - ps: |
        Write-Host "APPVEYOR_REPO_TAG=$env:APPVEYOR_REPO_TAG."
-       nuget pack src\SIPSorcery.Media.nuspec
-       dir src\*.nupkg
+       Write-Host "APPVEYOR_JOB_NUMBER=$env:APPVEYOR_JOB_NUMBER."
+       if((Test-Path -Path ('src\Win32')) -and (Test-Path -Path ('src\x64'))) {
+         nuget pack src\SIPSorcery.Media.nuspec
+         dir src\*.nupkg
+       }
 artifacts:
 - path: 'src\*.nupkg'
 deploy:
