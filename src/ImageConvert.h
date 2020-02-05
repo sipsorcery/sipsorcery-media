@@ -54,7 +54,8 @@ namespace SIPSorceryMedia {
     * @param[in] height: the height of the source image.
     * @param[in] stride: the stride of the source image.
     * @param[in] yuvOutputFormat: the YUV format for the destination image (e.g. I420, YUV2 etc.).
-    * @param[in] buffer: the buffer to hold the destination YUV image.
+    * @param[out] buffer: the buffer to hold the destination YUV image.
+    * @@Returns 0 if successful.
     */
     int ConvertRGBtoYUV(
       unsigned char* bmp,
@@ -72,7 +73,9 @@ namespace SIPSorceryMedia {
     * @param[in] width: the width of the source image.
     * @param[in] height: the height of the source image.
     * @param[in] rgbOutputFormat: the RGB type format for the destination image (e.g. I420, YUV2 etc.).
-    * @param[in] buffer: the buffer to hold the destination RGB image.
+    * @param[out] buffer: the buffer to hold the destination RGB image.
+    * @param[out] stride: holds the stride (length of each row) in the destination RGB image.
+    * @@Returns 0 if successful.
     */
     int ConvertYUVToRGB(
       unsigned char* yuv,
@@ -80,7 +83,8 @@ namespace SIPSorceryMedia {
       int width,
       int height,
       VideoSubTypesEnum rgbOutputFormat,
-      /* out */ array<Byte>^% buffer);
+      /* out */ array<Byte>^% buffer,
+      /* out */ int % stride);
 
   private:
     SwsContext* _swsContextRGBToYUV;

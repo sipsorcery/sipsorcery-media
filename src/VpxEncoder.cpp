@@ -12,24 +12,28 @@
 namespace SIPSorceryMedia {
 
 	VpxEncoder::VpxEncoder() 
-		: _vpxCodec(0), _rawImage(0), _vpxDecoder(0)
-	{ }
+		: _vpxCodec(nullptr), _rawImage(nullptr), _vpxDecoder(nullptr)
+	{ 
+		//printf(vpx_codec_version_str());
+	}
 
 	VpxEncoder::~VpxEncoder()
 	{
-		if (_rawImage != NULL) {
+		if (_rawImage != nullptr) {
 			vpx_img_free(_rawImage);
 		}
 
-		if (_vpxCodec != NULL) {
+		if (_vpxCodec != nullptr) {
 			vpx_codec_destroy(_vpxCodec);
 		}
 
-		if (_vpxDecoder != NULL) {
+		if (_vpxDecoder != nullptr) {
 			vpx_codec_destroy(_vpxDecoder);
 		}
 	}
 
+	// Setting config parameters in Chromium source.
+	// https://chromium.googlesource.com/external/webrtc/stable/src/+/b8671cb0516ec9f6c7fe22a6bbe331d5b091cdbb/modules/video_coding/codecs/vp8/vp8.cc
 	int VpxEncoder::InitEncoder(unsigned int width, unsigned int height, unsigned int stride)
 	{
 		_vpxCodec = new vpx_codec_ctx_t();
@@ -78,6 +82,7 @@ namespace SIPSorceryMedia {
 	int VpxEncoder::InitDecoder()
 	{
 		_vpxDecoder = new vpx_codec_ctx_t();
+		//vpx_codec_flags_t flags = VPX_CODEC_USE_POSTPROC;
 
 		/* Initialize decoder */
 		if (vpx_codec_dec_init(_vpxDecoder, (vpx_codec_vp8_dx()), NULL, 0)) {
@@ -121,6 +126,7 @@ namespace SIPSorceryMedia {
 		return 0;
 	}
 
+	// https://swift.im/git/swift-contrib/tree/Swiften/ScreenSharing/VP8Decoder.cpp?id=6247ed394302ff2cf1f33a71df808bebf7241242
 	int VpxEncoder::Decode(unsigned char* buffer, int bufferSize, array<Byte> ^% outBuffer, unsigned int % width, unsigned int % height)
 	{
 		vpx_codec_iter_t  iter = NULL;
@@ -130,7 +136,7 @@ namespace SIPSorceryMedia {
 		vpx_codec_err_t decodeResult = vpx_codec_decode(_vpxDecoder, (const uint8_t *)buffer, bufferSize, NULL, 0);
 
 		if (decodeResult != VPX_CODEC_OK) {
-			printf("VPX codec failed to decode the frame %s.\n", vpx_codec_err_to_string(decodeResult));
+			printf("VPX codec failed to decode the frame: %s.\n", vpx_codec_err_to_string(decodeResult));
 			return -1;
 		}
 		else {

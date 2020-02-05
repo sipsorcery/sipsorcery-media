@@ -72,7 +72,8 @@ namespace SIPSorceryMedia {
 			* Attempts to decode an VP8 frame to an I420 image.
 			* @param[in] buffer: pointer to the VP8 encoded frame to decode.
 			* @param[in] bufferSize: the length of the VP8 encoded frame.
-			* @param[out] outBuffer: a buffer holding the decoded I420 image.
+			* @param[out] outBuffer: a buffer holding the decoded I420 image. This buffer will be allocated
+			*  and should be null.
 			* @param[out] width: the width of the decoded I420 image.
 			* @param[out] height: the height of the decoded I420 image.
 			* @@Returns: 0 if successful or -1 if not.

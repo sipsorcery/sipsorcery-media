@@ -58,7 +58,7 @@ namespace SIPSorceryMedia {
 		return 0;
 	}
 
-	int ImageConvert::ConvertYUVToRGB(unsigned char* yuv, VideoSubTypesEnum yuvInputFormat, int width, int height, VideoSubTypesEnum rgbOutputFormat, /* out */ array<Byte> ^% buffer)
+	int ImageConvert::ConvertYUVToRGB(unsigned char* yuv, VideoSubTypesEnum yuvInputFormat, int width, int height, VideoSubTypesEnum rgbOutputFormat, /* out */ array<Byte> ^% buffer, /* out */ int % stride)
 	{
 		AVPixelFormat yuvPixelFormat = VideoSubTypes::GetPixelFormatForVideoSubType(yuvInputFormat);
 		AVPixelFormat rgbPixelFormat = VideoSubTypes::GetPixelFormatForVideoSubType(rgbOutputFormat);
@@ -91,6 +91,7 @@ namespace SIPSorceryMedia {
 
 		buffer = gcnew array<Byte>(bufferSize);
 		Marshal::Copy((IntPtr)dstFrameBuffer, buffer, 0, bufferSize);
+		stride = dstFrame->linesize[0];
 
 		av_freep(&dstFrameBuffer);
 		av_frame_free(&dstFrame);
