@@ -1,6 +1,6 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/u8nmgpkowce2q4fb/branch/master?svg=true)](https://ci.appveyor.com/project/sipsorcery/sipsorcery-9ql6k/branch/master)
 
-This repository contains a companion .Net Core 3.1 compatible library to the [SIPSorcery SIP and WebRTC library](https://github.com/sipsorcery/sipsorcery). This library provides wrappers and integrations for a number of open source libraries provide the functions to facilitate [WebRTC](https://www.w3.org/TR/webrtc/) communications:
+This repository contains a companion .Net Core 3.1 compatible library to the [SIPSorcery SIP and WebRTC library](https://github.com/sipsorcery/sipsorcery). This library provides wrappers and integrations for a number of open source libraries and the functions to facilitate [WebRTC](https://www.w3.org/TR/webrtc/) communications:
 
  - [OpenSSL](https://www.openssl.org/) - the DTLS handshake to negotiate the SRTP keying material.
  - [libsrtp](https://github.com/cisco/libsrtp) - for the Secure Realtime Transport Protocol.
