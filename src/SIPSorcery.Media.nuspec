@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>4.0.9-rc</version>
+    <version>4.0.13-pre</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -10,8 +10,9 @@
     <license type="expression">BSD-3-Clause</license>
     <projectUrl>https://github.com/sipsorcery/sipsorcery-media</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
-    <description>The SIPSorcery package for audio and video capabiltities.</description>
-	<releaseNotes>- v4.0.9-pre: Bug fix relating to sampling video capture device.
+    <description>The SIPSorcery package for WebRTC plumbing and Windows audio and video capture.</description>
+	<releaseNotes>- v4.0.13-pre: Added stride to image conversion function to support WebRTC receive.
+- v4.0.9-pre: Bug fix relating to sampling video capture device.
 - v4.0.8-pre: Refactor and cleanup for improved WebRTC support.
 - v3.0.2: Bug fix setting video sample avaialble in MFVideoSampler.
 - v3.0.1: Changed .Net target to v4.5.2.
