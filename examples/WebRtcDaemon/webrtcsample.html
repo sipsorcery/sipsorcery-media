@@ -21,6 +21,8 @@
             console.log("Web socket URL " + url);
 
             var pc;
+            const ms = new MediaStream();
+			videoControl.srcObject = ms;
 
             ws = new WebSocket(url, []);
 
@@ -29,21 +31,10 @@
 
                 pc = new RTCPeerConnection(null, pc_constraints);
 
-                pc.ontrack = function (event) {
-                    console.log('Remote track added.');
-                    console.log(event);
-
-                    if (event.streams && event.streams[0]) {
-                        videoControl.srcObject = event.streams[0];
-                    }
-                    else {
-                        if (!inboundStream) {
-                            inboundStream = new MediaStream();
-                            videoControl.srcObject = inboundStream;
-                        }
-                        inboundStream.addTrack(event.track);
-                    }
-                }
+                pc.addEventListener('track', async (event) => {
+					console.log('Remote ' + event.track.kind + ' stream available.');
+					ms.addTrack(event.track, ms);
+				});
             };
 
             ws.onmessage = async function (evt) {
