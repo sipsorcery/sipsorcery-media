@@ -405,43 +405,51 @@ namespace SIPSorcery.Net.WebRtc
         /// <returns>True if the handshake completed successfully or false otherwise.</returns>
         private bool DoDtlsHandshake(WebRtcSession webRtcSession)
         {
-            logger.LogDebug("DoDtlsHandshake started.");
-
-            if (!File.Exists(_dtlsCertificatePath))
+            try
             {
-                throw new ApplicationException($"The DTLS certificate file could not be found at {_dtlsCertificatePath}.");
+                logger.LogDebug("DoDtlsHandshake started.");
+
+                if (!File.Exists(_dtlsCertificatePath))
+                {
+                    throw new ApplicationException($"The DTLS certificate file could not be found at {_dtlsCertificatePath}.");
+                }
+                else if (!File.Exists(_dtlsKeyPath))
+                {
+                    throw new ApplicationException($"The DTLS key file could not be found at {_dtlsKeyPath}.");
+                }
+
+                var dtls = new DtlsHandshake(_dtlsCertificatePath, _dtlsKeyPath);
+                webRtcSession.OnClose += (reason) => dtls.Shutdown();
+
+                int res = dtls.DoHandshakeAsServer((ulong)webRtcSession.RtpSession.RtpChannel.RtpSocket.Handle);
+
+                logger.LogDebug("DtlsContext initialisation result=" + res);
+
+                if (dtls.IsHandshakeComplete())
+                {
+                    logger.LogDebug("DTLS negotiation complete.");
+
+                    var srtpSendContext = new Srtp(dtls, false);
+                    var srtpReceiveContext = new Srtp(dtls, true);
+
+                    webRtcSession.RtpSession.SetSecurityContext(
+                        srtpSendContext.ProtectRTP,
+                        srtpReceiveContext.UnprotectRTP,
+                        srtpSendContext.ProtectRTCP,
+                        srtpReceiveContext.UnprotectRTCP);
+
+                    webRtcSession.IsDtlsNegotiationComplete = true;
+
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
             }
-            else if (!File.Exists(_dtlsKeyPath))
+            catch(Exception excp)
             {
-                throw new ApplicationException($"The DTLS key file could not be found at {_dtlsKeyPath}.");
-            }
-
-            var dtls = new DtlsHandshake(_dtlsCertificatePath, _dtlsKeyPath);
-            webRtcSession.OnClose += (reason) => dtls.Shutdown();
-
-            int res = dtls.DoHandshakeAsServer((ulong)webRtcSession.RtpSession.RtpChannel.RtpSocket.Handle);
-
-            logger.LogDebug("DtlsContext initialisation result=" + res);
-
-            if (dtls.IsHandshakeComplete())
-            {
-                logger.LogDebug("DTLS negotiation complete.");
-
-                var srtpSendContext = new Srtp(dtls, false);
-                var srtpReceiveContext = new Srtp(dtls, true);
-
-                webRtcSession.RtpSession.SetSecurityContext(
-                    srtpSendContext.ProtectRTP,
-                    srtpReceiveContext.UnprotectRTP,
-                    srtpSendContext.ProtectRTCP,
-                    srtpReceiveContext.UnprotectRTCP);
-
-                webRtcSession.IsDtlsNegotiationComplete = true;
-
-                return true;
-            }
-            else
-            {
+                logger.LogWarning($"Exception DoDtlsHandshake. {excp}");
                 return false;
             }
         }
@@ -460,12 +468,11 @@ namespace SIPSorcery.Net.WebRtc
                 {
                     if (conn != null)
                     {
-                        OnMp4MediaSampleReady -= conn.WebRtcSession.SendMedia;
-                        OnTestPatternSampleReady -= conn.WebRtcSession.SendMedia;
+                        OnMp4MediaSampleReady -= conn.SendMedia;
+                        OnTestPatternSampleReady -= conn.SendMedia;
 
                         if (!conn.WebRtcSession.IsClosed)
                         {
-
                             conn.WebRtcSession.Close(reason);
                         }
                     }
@@ -776,12 +783,17 @@ namespace SIPSorcery.Net.WebRtc
                 {
                     foreach(var conn in _webRtcConnections.Where(x => DateTime.Now.Subtract(x.Value.CreatedAt).TotalSeconds > _connectionTimeLimitSeconds).Select(x => x.Value))
                     {
-                        OnMp4MediaSampleReady -= conn.WebRtcSession.SendMedia;
-                        OnTestPatternSampleReady -= conn.WebRtcSession.SendMedia;
+                        OnMp4MediaSampleReady -= conn.SendMedia;
+                        OnTestPatternSampleReady -= conn.SendMedia;
 
                         if(conn.WebRtcSession.IsDtlsNegotiationComplete && !conn.WebRtcSession.IsClosed && encodedBuffer != null)
                         {
-                            conn.SendMedia(SDPMediaTypesEnum.video, conn.LastVideoTimeStamp, encodedBuffer);
+                            // Send the expired frame 3 times as a crude attempt to cope with packet loss.
+                            conn.SendMedia(SDPMediaTypesEnum.video, conn.LastVideoTimeStamp + VP8_TIMESTAMP_SPACING, encodedBuffer);
+                            await Task.Delay(1);
+                            conn.SendMedia(SDPMediaTypesEnum.video, conn.LastVideoTimeStamp + VP8_TIMESTAMP_SPACING, encodedBuffer);
+                            await Task.Delay(1);
+                            conn.SendMedia(SDPMediaTypesEnum.video, conn.LastVideoTimeStamp + VP8_TIMESTAMP_SPACING, encodedBuffer);
                         }
 
                         conn.WebRtcSession.Close("expired");

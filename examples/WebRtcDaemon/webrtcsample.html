@@ -16,11 +16,30 @@
             ]
         };
 
+        var maxPC;
+        var testPatternPC;
+
         function wsConnect(url, videoControl) {
 
             console.log("Web socket URL " + url);
 
             var pc;
+
+            if (url.endsWith("max")) {
+                if (maxPC != null) {
+                    maxPC.close();
+                }
+                maxPC = new RTCPeerConnection(null, pc_constraints);
+                pc = maxPC;
+            }
+            else if (url.endsWith("testpattern")) {
+                if (testPatternPC != null) {
+                    testPatternPC.close();
+                }
+                testPatternPC = new RTCPeerConnection(null, pc_constraints);
+                pc = testPatternPC;
+            }
+
             const ms = new MediaStream();
 			videoControl.srcObject = ms;
 
@@ -29,7 +48,7 @@
             ws.onopen = function () {
                 console.log("web socket onopen.");
 
-                pc = new RTCPeerConnection(null, pc_constraints);
+                //pc = new RTCPeerConnection(null, pc_constraints);
 
                 pc.addEventListener('track', async (event) => {
 					console.log('Remote ' + event.track.kind + ' stream available.');
