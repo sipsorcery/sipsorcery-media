@@ -118,10 +118,11 @@
 
 //-----------------------------------------------------------------------------
 // To install as a Windows Service:
-// c:\Apps\WebRtcDaemon>sc create "SIPSorcery WebRTC Daemon" binpath="C:\Apps\WebRTCDaemon\WebRTCDaemon.exe" start=auto
+// C:\Dev\sipsorcery\sipsorcery-media\examples\WebRtcDaemon> dotnet publish --configuration Release
+// <publish dir>> sc create "SIPSorcery WebRtc Daemon" binpath="<publish dir>\WebRTCDaemon.exe" start=auto
 //
 // To uninstall Windows Service:
-// c:\Apps\WebRtcDaemon>sc delete "SIPSorcery WebRTC Daemon" 
+// <publish dir>>sc delete "SIPSorcery WebRTC Daemon" 
 //-----------------------------------------------------------------------------
 
 using System;
@@ -151,6 +152,32 @@ namespace SIPSorcery.Net.WebRtc
     {
         Max = 0,
         TestPattern = 1
+    }
+
+    /// <summary>
+    /// Used to hold the WebRTC session and some additional properties.
+    /// </summary>
+    public class WebRtcConnection
+    {
+        public readonly DateTime CreatedAt;
+        public WebRtcSession WebRtcSession;
+        public uint LastVideoTimeStamp { get; private set; }
+
+        public WebRtcConnection(WebRtcSession webRtcSession)
+        {
+            CreatedAt = DateTime.Now;
+            WebRtcSession = webRtcSession;
+        }
+
+        public void SendMedia(SDPMediaTypesEnum mediaType, uint timestamp, byte[] sample)
+        {
+            if(mediaType == SDPMediaTypesEnum.video)
+            {
+                LastVideoTimeStamp = timestamp;
+            }
+
+            WebRtcSession.SendMedia(mediaType, timestamp, sample);
+        }
     }
 
     public class SDPExchange : WebSocketBehavior
@@ -196,13 +223,15 @@ namespace SIPSorcery.Net.WebRtc
         private readonly string _dtlsKeyPath = ConfigurationManager.AppSettings["DtlsKeyPath"];
         private readonly string _dtlsCertificateThumbprint = ConfigurationManager.AppSettings["DtlsCertificateThumbprint"];
         private readonly string _mediaFilePath = ConfigurationManager.AppSettings["MediaFilePath"];
-        private readonly string _testPattermImagePath = ConfigurationManager.AppSettings["TestPatternFilePath"];
+        private readonly string _testPatternImagePath = ConfigurationManager.AppSettings["TestPatternFilePath"];
+        private readonly string _expiredImagePath = ConfigurationManager.AppSettings["ExpiredImageFilePath"];
         private readonly string _webSocketPort = ConfigurationManager.AppSettings["WebSocketPort"];
+        private readonly int _connectionTimeLimitSeconds = int.Parse(ConfigurationManager.AppSettings["ConnectionTimeLimitSeconds"]);
 
         private bool _exit = false;
         private WebSocketServer _webSocketServer;
         private SIPSorceryMedia.MediaSource _mediaSource;
-        private ConcurrentDictionary<string, WebRtcSession> _webRtcSessions = new ConcurrentDictionary<string, WebRtcSession>();
+        private ConcurrentDictionary<string, WebRtcConnection> _webRtcConnections = new ConcurrentDictionary<string, WebRtcConnection>();
         private bool _isMp4Sampling = false;
         private bool _isTestPatternSampling = false;
 
@@ -251,7 +280,7 @@ namespace SIPSorcery.Net.WebRtc
                     sdpReceiver.SDPAnswerReceived += WebRtcAnswerReceived;
                 });
 
-                if (!String.IsNullOrEmpty(_testPattermImagePath) && File.Exists(_testPattermImagePath))
+                if (!String.IsNullOrEmpty(_testPatternImagePath) && File.Exists(_testPatternImagePath))
                 {
                     _webSocketServer.AddWebSocketService<SDPExchange>("/testpattern", (sdpReceiver) =>
                     {
@@ -269,7 +298,9 @@ namespace SIPSorcery.Net.WebRtc
                 _mediaSource = new MediaSource();
                 _mediaSource.Init(_mediaFilePath, true);
 
-                while(!ct.IsCancellationRequested)
+                _ = Task.Run(ExpireConnections);
+
+                while (!ct.IsCancellationRequested)
                 {
                     await Task.Delay(1000);
                 }
@@ -295,9 +326,9 @@ namespace SIPSorcery.Net.WebRtc
                 _mediaSource.Shutdown();
                 _webSocketServer.Stop();
 
-                foreach (var session in _webRtcSessions.Values)
+                foreach (var connection in _webRtcConnections.Values)
                 {
-                    session.Close("normal closure");
+                    connection.WebRtcSession.Close("shutdown");
                 }
             }
             catch (Exception excp)
@@ -310,7 +341,7 @@ namespace SIPSorcery.Net.WebRtc
         {
             logger.LogDebug($"New WebRTC client added for web socket connection {webSocketID}.");
 
-            if (!_webRtcSessions.Any(x => x.Key == webSocketID))
+            if (!_webRtcConnections.Any(x => x.Key == webSocketID))
             {
                 var webRtcSession = new WebRtcSession(AddressFamily.InterNetwork, _dtlsCertificateThumbprint, null, null);
 
@@ -322,7 +353,9 @@ namespace SIPSorcery.Net.WebRtc
                     webRtcSession.addTrack(SDPMediaTypesEnum.audio, new List<SDPMediaFormat> { new SDPMediaFormat(SDPMediaFormatsEnum.PCMU) });
                 }
 
-                if (_webRtcSessions.TryAdd(webSocketID, webRtcSession))
+                WebRtcConnection conn = new WebRtcConnection(webRtcSession);
+
+                if (_webRtcConnections.TryAdd(webSocketID, conn))
                 {
                     webRtcSession.OnClose += (reason) => PeerClosed(webSocketID, reason);
                     webRtcSession.RtpSession.OnRtcpBye += (reason) => PeerClosed(webSocketID, reason);
@@ -338,7 +371,7 @@ namespace SIPSorcery.Net.WebRtc
                     {
                         if (mediaSource == MediaSourceEnum.Max)
                         {
-                            OnMp4MediaSampleReady += webRtcSession.SendMedia;
+                            OnMp4MediaSampleReady += conn.SendMedia;
                             if (!_isMp4Sampling)
                             {
                                 _ = Task.Run(SampleMp4Media);
@@ -346,7 +379,7 @@ namespace SIPSorcery.Net.WebRtc
                         }
                         else if (mediaSource == MediaSourceEnum.TestPattern)
                         {
-                            OnTestPatternSampleReady += webRtcSession.SendMedia;
+                            OnTestPatternSampleReady += conn.SendMedia;
                             if (!_isTestPatternSampling)
                             {
                                 _ = Task.Run(SampleTestPattern);
@@ -419,21 +452,22 @@ namespace SIPSorcery.Net.WebRtc
             {
                 logger.LogDebug($"WebRTC session closed for call ID {callID} with reason {reason}.");
 
-                WebRtcSession closedSession = null;
-
-                if (!_webRtcSessions.TryRemove(callID, out closedSession))
+                if (!_webRtcConnections.TryRemove(callID, out var conn))
                 {
                     logger.LogError("Failed to remove closed WebRTC session from dictionary.");
                 }
-
-                if (closedSession != null)
+                else
                 {
-                    OnMp4MediaSampleReady -= closedSession.SendMedia;
-                    OnTestPatternSampleReady -= closedSession.SendMedia;
-
-                    if (!closedSession.IsClosed)
+                    if (conn != null)
                     {
-                        closedSession.Close(reason);
+                        OnMp4MediaSampleReady -= conn.WebRtcSession.SendMedia;
+                        OnTestPatternSampleReady -= conn.WebRtcSession.SendMedia;
+
+                        if (!conn.WebRtcSession.IsClosed)
+                        {
+
+                            conn.WebRtcSession.Close(reason);
+                        }
                     }
                 }
             }
@@ -451,16 +485,16 @@ namespace SIPSorcery.Net.WebRtc
 
                 var answerSDP = SDP.ParseSDPDescription(sdpAnswer);
 
-                var session = _webRtcSessions.Where(x => x.Key == webSocketID).Select(x => x.Value).SingleOrDefault();
+                var conn = _webRtcConnections.Where(x => x.Key == webSocketID).Select(x => x.Value).SingleOrDefault();
 
-                if (session == null)
+                if (conn.WebRtcSession == null)
                 {
                     logger.LogWarning("No WebRTC client entry exists for web socket ID " + webSocketID + ", ignoring.");
                 }
                 else
                 {
                     logger.LogDebug("New WebRTC client SDP answer for web socket ID " + webSocketID + ".");
-                    session.setRemoteDescription(SdpType.answer, answerSDP);
+                    conn.WebRtcSession.setRemoteDescription(SdpType.answer, answerSDP);
                 }
 
                 context.WebSocket.CloseAsync();
@@ -527,7 +561,7 @@ namespace SIPSorcery.Net.WebRtc
                             if (vpxEncoder == null ||
                                 (vpxEncoder.GetWidth() != sample.Width || vpxEncoder.GetHeight() != sample.Height || vpxEncoder.GetStride() != sample.Stride))
                             {
-                                if(vpxEncoder != null)
+                                if (vpxEncoder != null)
                                 {
                                     vpxEncoder.Dispose();
                                 }
@@ -599,7 +633,7 @@ namespace SIPSorcery.Net.WebRtc
 
                 _isTestPatternSampling = true;
 
-                Bitmap testPattern = new Bitmap(_testPattermImagePath);
+                Bitmap testPattern = new Bitmap(_testPatternImagePath);
 
                 // Get the stride.
                 Rectangle rect = new Rectangle(0, 0, testPattern.Width, testPattern.Height);
@@ -638,7 +672,6 @@ namespace SIPSorcery.Net.WebRtc
 
                         unsafe
                         {
-
                             fixed (byte* p = sampleBuffer)
                             {
                                 byte[] convertedFrame = null;
@@ -679,6 +712,87 @@ namespace SIPSorcery.Net.WebRtc
             {
                 logger.LogDebug("test pattern sampling thread stopped.");
                 _isTestPatternSampling = false;
+            }
+        }
+
+        private async Task ExpireConnections()
+        {
+            try
+            {
+                logger.LogDebug("Starting expire connections thread.");
+
+                byte[] encodedBuffer = null;
+
+                if (File.Exists(_expiredImagePath))
+                {
+                    Bitmap expiredImage = expiredImage = new Bitmap(_expiredImagePath);
+
+                    // Get the stride.
+                    Rectangle rect = new Rectangle(0, 0, expiredImage.Width, expiredImage.Height);
+                    System.Drawing.Imaging.BitmapData bmpData =
+                        expiredImage.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadWrite,
+                        expiredImage.PixelFormat);
+
+                    // Get the address of the first line.
+                    int stride = bmpData.Stride;
+
+                    expiredImage.UnlockBits(bmpData);
+
+                    // Initialise the video codec and color converter.
+                    SIPSorceryMedia.VpxEncoder vpxEncoder = new VpxEncoder();
+                    vpxEncoder.InitEncoder((uint)expiredImage.Width, (uint)expiredImage.Height, (uint)stride);
+
+                    SIPSorceryMedia.ImageConvert colorConverter = new ImageConvert();
+
+                    byte[] sampleBuffer = null;
+
+
+                    sampleBuffer = BitmapToRGB24(expiredImage);
+
+                    unsafe
+                    {
+                        fixed (byte* p = sampleBuffer)
+                        {
+                            byte[] convertedFrame = null;
+                            colorConverter.ConvertRGBtoYUV(p, VideoSubTypesEnum.BGR24, expiredImage.Width, expiredImage.Height, stride, VideoSubTypesEnum.I420, ref convertedFrame);
+
+                            fixed (byte* q = convertedFrame)
+                            {
+                                int encodeResult = vpxEncoder.Encode(q, convertedFrame.Length, 1, ref encodedBuffer);
+
+                                if (encodeResult != 0)
+                                {
+                                    logger.LogWarning("VPX encode of expired image failed.");
+                                }
+                            }
+                        }
+                    }
+
+                    expiredImage.Dispose();
+                    vpxEncoder.Dispose();
+                }
+
+                while(!_exit)
+                {
+                    foreach(var conn in _webRtcConnections.Where(x => DateTime.Now.Subtract(x.Value.CreatedAt).TotalSeconds > _connectionTimeLimitSeconds).Select(x => x.Value))
+                    {
+                        OnMp4MediaSampleReady -= conn.WebRtcSession.SendMedia;
+                        OnTestPatternSampleReady -= conn.WebRtcSession.SendMedia;
+
+                        if(conn.WebRtcSession.IsDtlsNegotiationComplete && !conn.WebRtcSession.IsClosed && encodedBuffer != null)
+                        {
+                            conn.SendMedia(SDPMediaTypesEnum.video, conn.LastVideoTimeStamp, encodedBuffer);
+                        }
+
+                        conn.WebRtcSession.Close("expired");
+                    }
+
+                    await Task.Delay(1000);
+                }
+            }
+            catch (Exception excp)
+            {
+                logger.LogError("Exception ExpireConnections. " + excp);
             }
         }
 
