@@ -4,8 +4,14 @@
     <Reference Include="SIPSorceryMedia" Condition="'$(Platform)' == 'x64' or '$(Platform)' == 'AnyCPU'">
 		<HintPath>$(MSBuildThisFileDirectory)\..\build\x64\SIPSorceryMedia.dll</HintPath>
     </Reference>
+	<Reference Include="SIPSorcery.RtpAVSession" Condition="'$(Platform)' == 'x64' or '$(Platform)' == 'AnyCPU'">
+		<HintPath>$(MSBuildThisFileDirectory)\..\build\x64\SIPSorcery.RtpAVSession.dll</HintPath>
+    </Reference>
 	<Reference Include="SIPSorceryMedia" Condition="'$(Platform)' == 'x86'">
 		<HintPath>$(MSBuildThisFileDirectory)\..\build\x86\SIPSorceryMedia.dll</HintPath>
+    </Reference>
+	<Reference Include="SIPSorcery.RtpAVSession" Condition="'$(Platform)' == 'x86'">
+		<HintPath>$(MSBuildThisFileDirectory)\..\build\x86\SIPSorcery.RtpAVSession.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>
