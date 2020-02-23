@@ -62,6 +62,7 @@ namespace SIPSorcery.Media
     {
         private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 30;
         private const int VP8_TIMESTAMP_SPACING = 3000;
+        private const int VP8_HEADER_LENGTH = 1; // 4 for Bria and chrome.
 
         /// <summary>
         /// PCMU encoding for silence, http://what-when-how.com/voip/g-711-compression-voip/
@@ -305,8 +306,8 @@ namespace SIPSorcery.Media
             if (_currVideoFramePosn > 0 || (rtpPacket.Payload[0] & 0x10) > 0)
             {
                 // TODO: use the VP8 Payload descriptor to properly determine the VP8 header length (currently hard coded to 4).
-                Buffer.BlockCopy(rtpPacket.Payload, 4, _currVideoFrame, _currVideoFramePosn, rtpPacket.Payload.Length - 4);
-                _currVideoFramePosn += rtpPacket.Payload.Length - 4;
+                Buffer.BlockCopy(rtpPacket.Payload, VP8_HEADER_LENGTH, _currVideoFrame, _currVideoFramePosn, rtpPacket.Payload.Length - VP8_HEADER_LENGTH);
+                _currVideoFramePosn += rtpPacket.Payload.Length - VP8_HEADER_LENGTH;
 
                 if (rtpPacket.Header.MarkerBit == 1)
                 {
