@@ -16,11 +16,15 @@
 
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using SIPSorcery.Net;
@@ -57,8 +61,11 @@ namespace SIPSorcery.Media
         public string SourceFile;
     }
 
-    public class RtpAVSession : RTPMediaSession
+    public class RtpAVSession : RTPSession, IMediaSession
     {
+        public const string TELEPHONE_EVENT_ATTRIBUTE = "telephone-event";
+        public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
+        public const int DTMF_EVENT_PAYLOAD_ID = 101;
         private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 30;
         private const int VP8_TIMESTAMP_SPACING = 3000;
 
@@ -72,7 +79,6 @@ namespace SIPSorcery.Media
 
         private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
 
-        private CancellationTokenSource _cts = new CancellationTokenSource();
         private AudioSourceOptions _audioSourceOpts;
         private VideoSourceOptions _videoSourceOpts;
 
@@ -91,30 +97,41 @@ namespace SIPSorcery.Media
         /// </summary>
         private WaveInEvent _waveInEvent;
 
-        private static byte[] _currVideoFrame = new byte[65536];
-        private static int _currVideoFramePosn = 0;
+        private byte[] _currVideoFrame = new byte[65536];
+        private int _currVideoFramePosn = 0;
 
         private VpxEncoder _vpxDecoder;
         private ImageConvert _imgConverter;
-        private PictureBox _videoBox;
 
         /// <summary>
         /// Dummy video source which supplies a test pattern with a rolling 
         /// timestamp.
         /// </summary>
         private TestPatternVideoSource _testPatternVideoSource;
+        private StreamReader _audioStreamReader;
+        private Timer _audioStreamTimer;
 
-        private uint _rtpAudioTimestamp = 0;
         private uint _rtpAudioTimestampPeriod = 0;
-        private uint _rtpVideoTimestamp = 0;
         private bool _isClosed = false;
 
-        public RtpAVSession(AddressFamily addrFamily, AudioSourceOptions audioSourceOptions, VideoSourceOptions videoSourceOptions, PictureBox videoBox)
-            : base(addrFamily)
+        /// <summary>
+        /// Fired when a video sample is ready for rendering.
+        /// [sample, width, height, stride].
+        /// </summary>
+        public event Action<byte[], uint, uint, int> OnVideoSampleReady;
+
+        /// <summary>
+        /// Creates a new RTP audio visual session where the remote video stream will be rendered to a Windows
+        /// Forms control.
+        /// </summary>
+        /// <param name="addrFamily">The address family to create the underlying socket on (IPv4 or IPv6).</param>
+        /// <param name="audioSourceOptions">The options for the audio source.</param>
+        /// <param name="videoSourceOptions">The options for the audio source.</param>
+        public RtpAVSession(AddressFamily addrFamily, AudioSourceOptions audioSourceOptions, VideoSourceOptions videoSourceOptions)
+            : base(addrFamily, false, false, false)
         {
             _audioSourceOpts = audioSourceOptions;
             _videoSourceOpts = videoSourceOptions;
-            _videoBox = videoBox;
 
             _vpxDecoder = new VpxEncoder();
             int res = _vpxDecoder.InitDecoder();
@@ -130,7 +147,7 @@ namespace SIPSorcery.Media
                 MediaStreamTrack videoTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.audio, false, new List<SDPMediaFormat> { new SDPMediaFormat(SDPMediaFormatsEnum.PCMU) });
                 addTrack(videoTrack);
 
-                InitAudio(_audioSourceOpts.AudioSource);
+                InitAudio(_audioSourceOpts);
             }
 
             if (_videoSourceOpts != null && _videoSourceOpts.VideoSource != VideoSourcesEnum.None)
@@ -138,16 +155,16 @@ namespace SIPSorcery.Media
                 MediaStreamTrack videoTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.video, false, new List<SDPMediaFormat> { new SDPMediaFormat(SDPMediaFormatsEnum.VP8) });
                 addTrack(videoTrack);
 
-                InitVideo(_videoSourceOpts.VideoSource);
+                InitVideo(_videoSourceOpts);
             }
 
             base.OnRtpPacketReceived += RtpPacketReceived;
         }
 
         /// <summary>
-        /// Starts the media capturing devices.
+        /// Starts the media capturing/source devices.
         /// </summary>
-        public void Start()
+        public void StartMedia()
         {
             _waveOutEvent?.Play();
 
@@ -159,22 +176,22 @@ namespace SIPSorcery.Media
             }
             else if (audioSource == AudioSourcesEnum.Silence)
             {
-                Task.Run(() => SendSilence(_cts.Token));
+                _audioStreamTimer = new Timer(SendSilenceSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
             }
             else if (audioSource == AudioSourcesEnum.Music)
             {
-                Task.Run(() => SendMusic(_cts.Token));
+                _audioStreamTimer = new Timer(SendMusicSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
             }
 
             VideoSourcesEnum videoSource = (_videoSourceOpts != null) ? _videoSourceOpts.VideoSource : VideoSourcesEnum.None;
 
             if (videoSource == VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
             {
-                Task.Run(() => _testPatternVideoSource.Start(_cts.Token));
+                _testPatternVideoSource.Start();
             }
         }
 
-        public override void Close()
+        public void Close()
         {
             if (!_isClosed)
             {
@@ -184,16 +201,17 @@ namespace SIPSorcery.Media
 
                 _waveOutEvent?.Stop();
                 _waveInEvent?.StopRecording();
-                _cts.Cancel();
+                _audioStreamTimer?.Dispose();
+                _testPatternVideoSource?.Stop();
 
-                base.Close();
+                base.CloseSession("normal");
             }
         }
 
         /// <summary>
         /// Initialise the audio capture and render device.
         /// </summary>
-        private void InitAudio(AudioSourcesEnum audioSource)
+        private void InitAudio(AudioSourceOptions audioSourceOpts)
         {
             // Render device.
             _waveOutEvent = new WaveOutEvent();
@@ -202,7 +220,7 @@ namespace SIPSorcery.Media
             _waveOutEvent.Init(_waveProvider);
 
             // Audio source.
-            if (audioSource == AudioSourcesEnum.Microphone)
+            if (audioSourceOpts.AudioSource == AudioSourcesEnum.Microphone)
             {
                 if (WaveInEvent.DeviceCount > 0)
                 {
@@ -218,6 +236,10 @@ namespace SIPSorcery.Media
                     Log.LogWarning("No audio capture devices are available. No audio stream will be sent.");
                 }
             }
+            else if (audioSourceOpts.AudioSource == AudioSourcesEnum.Music)
+            {
+                _audioStreamReader = new StreamReader(_audioSourceOpts.SourceFile);
+            }
 
             _rtpAudioTimestampPeriod = (uint)(SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.PCMU) / AUDIO_SAMPLE_PERIOD_MILLISECONDS);
         }
@@ -225,9 +247,9 @@ namespace SIPSorcery.Media
         /// <summary>
         /// Initialise the video capture and render device.
         /// </summary>
-        private void InitVideo(VideoSourcesEnum videoSource)
+        private void InitVideo(VideoSourceOptions videoSourceOpts)
         {
-            if (videoSource == VideoSourcesEnum.TestPattern)
+            if (videoSourceOpts.VideoSource == VideoSourcesEnum.TestPattern)
             {
                 _testPatternVideoSource = new TestPatternVideoSource();
                 _testPatternVideoSource.SampleReady += LocalVideoSampleAvailable;
@@ -248,8 +270,7 @@ namespace SIPSorcery.Media
                 sample[sampleIndex++] = ulawByte;
             }
 
-            base.SendAudioFrame(_rtpAudioTimestamp, (int)SDPMediaFormatsEnum.PCMU, sample);
-            _rtpAudioTimestamp += _rtpAudioTimestampPeriod;
+            base.SendAudioFrame((uint)sample.Length, (int)SDPMediaFormatsEnum.PCMU, sample);
         }
 
         /// <summary>
@@ -257,8 +278,7 @@ namespace SIPSorcery.Media
         /// </summary>
         private void LocalVideoSampleAvailable(byte[] sample)
         {
-            base.SendVp8Frame(_rtpVideoTimestamp, (int)SDPMediaFormatsEnum.VP8, sample);
-            _rtpVideoTimestamp += VP8_TIMESTAMP_SPACING;
+            base.SendVp8Frame(VP8_TIMESTAMP_SPACING, (int)SDPMediaFormatsEnum.VP8, sample);
         }
 
         /// <summary>
@@ -326,28 +346,26 @@ namespace SIPSorcery.Media
                             }
                             else
                             {
-                                //Console.WriteLine($"Video frame ready {width}x{height}.");
-
-                                fixed (byte* r = i420)
+                                if(OnVideoSampleReady != null)
                                 {
-                                    byte[] bmp = null;
-                                    int stride = 0;
-                                    int convRes = _imgConverter.ConvertYUVToRGB(r, VideoSubTypesEnum.I420, (int)width, (int)height, VideoSubTypesEnum.BGR24, ref bmp, ref stride);
+                                    fixed (byte* r = i420)
+                                    {
+                                        byte[] bmp = null;
+                                        int stride = 0;
+                                        int convRes = _imgConverter.ConvertYUVToRGB(r, VideoSubTypesEnum.I420, (int)width, (int)height, VideoSubTypesEnum.BGR24, ref bmp, ref stride);
 
-                                    if (convRes == 0)
-                                    {
-                                        _videoBox.BeginInvoke(new Action(() =>
+                                        if (convRes == 0)
                                         {
-                                            fixed (byte* s = bmp)
-                                            {
-                                                System.Drawing.Bitmap bmpImage = new System.Drawing.Bitmap((int)width, (int)height, stride, System.Drawing.Imaging.PixelFormat.Format24bppRgb, (IntPtr)s);
-                                                _videoBox.Image = bmpImage;
-                                            }
-                                        }));
-                                    }
-                                    else
-                                    {
-                                        Log.LogWarning("Pixel format conversion of decoded sample failed.");
+                                            //fixed (byte* s = bmp)
+                                            //{
+                                            //    System.Drawing.Bitmap bmpImage = new System.Drawing.Bitmap((int)width, (int)height, stride, System.Drawing.Imaging.PixelFormat.Format24bppRgb, (IntPtr)s);
+                                            //}
+                                            OnVideoSampleReady(bmp, width, height, stride);
+                                        }
+                                        else
+                                        {
+                                            Log.LogWarning("Pixel format conversion of decoded sample failed.");
+                                        }
                                     }
                                 }
                             }
@@ -368,52 +386,100 @@ namespace SIPSorcery.Media
         /// Sends the sounds of silence. If the destination is on the other side of a NAT this is useful to open
         /// a pinhole and hopefully get the remote RTP stream through.
         /// </summary>
-        private async void SendMusic(CancellationToken ct)
+        private void SendMusicSample(object state)
         {
-            uint rtpSampleTimestamp = 0;
+            int sampleSize = (SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.PCMU) / 1000) * AUDIO_SAMPLE_PERIOD_MILLISECONDS;
+            byte[] sample = new byte[sampleSize];
+            int bytesRead = _audioStreamReader.BaseStream.Read(sample, 0, sample.Length);
 
-            using (StreamReader sr = new StreamReader(_audioSourceOpts.SourceFile))
+            if (bytesRead == 0 || _audioStreamReader.EndOfStream)
             {
-                int sampleSize = (SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.PCMU) / 1000) * AUDIO_SAMPLE_PERIOD_MILLISECONDS;
-                byte[] sample = new byte[sampleSize];
-                int bytesRead = sr.BaseStream.Read(sample, 0, sample.Length);
-
-                while (bytesRead > 0 && !ct.IsCancellationRequested)
-                {
-                    SendAudioFrame(rtpSampleTimestamp, (int)SDPMediaFormatsEnum.PCMU, sample);
-                    rtpSampleTimestamp += _rtpAudioTimestampPeriod;
-
-                    bytesRead = sr.BaseStream.Read(sample, 0, sample.Length);
-
-                    await Task.Delay(AUDIO_SAMPLE_PERIOD_MILLISECONDS);
-                }
+                _audioStreamReader.BaseStream.Position = 0;
+                bytesRead = _audioStreamReader.BaseStream.Read(sample, 0, sample.Length);
             }
+
+            SendAudioFrame((uint)bytesRead, (int)SDPMediaFormatsEnum.PCMU, sample.Take(bytesRead).ToArray());
         }
 
         /// <summary>
         /// Sends the sounds of silence. If the destination is on the other side of a NAT this is useful to open
         /// a pinhole and hopefully get the remote RTP stream through.
         /// </summary>
-        private async void SendSilence(CancellationToken ct)
+        private void SendSilenceSample(object state)
         {
             uint bufferSize = (uint)AUDIO_SAMPLE_PERIOD_MILLISECONDS;
-            uint rtpSampleTimestamp = 0;
 
-            while (!ct.IsCancellationRequested)
+            byte[] sample = new byte[bufferSize / 2];
+            int sampleIndex = 0;
+
+            for (int index = 0; index < bufferSize; index += 2)
             {
-                byte[] sample = new byte[bufferSize / 2];
-                int sampleIndex = 0;
+                sample[sampleIndex] = PCMU_SILENCE_BYTE_ZERO;
+                sample[sampleIndex + 1] = PCMU_SILENCE_BYTE_ONE;
+            }
 
-                for (int index = 0; index < bufferSize; index += 2)
+            SendAudioFrame(bufferSize, (int)SDPMediaFormatsEnum.PCMU, sample);
+        }
+
+        public Task SendDtmf(byte key, CancellationToken cancellationToken = default)
+        {
+            var dtmfEvent = new RTPEvent(key, false, RTPEvent.DEFAULT_VOLUME, DTMF_EVENT_DURATION, DTMF_EVENT_PAYLOAD_ID);
+            return SendDtmfEvent(dtmfEvent, cancellationToken);
+        }
+
+        public void SendMedia(SDPMediaTypesEnum mediaType, uint samplePeriod, byte[] sample)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Sets relevant properties for this session based on the SDP from the remote party.
+        /// </summary>
+        /// <param name="sessionDescription">The session description from the remote call party.</param>
+        public override void setRemoteDescription(RTCSessionDescription sessionDescription)
+        {
+            base.setRemoteDescription(sessionDescription);
+
+            var connAddr = IPAddress.Parse(sessionDescription.sdp.Connection.ConnectionAddress);
+
+            foreach (var announcement in sessionDescription.sdp.Media)
+            {
+                var annAddr = connAddr;
+                if (announcement.Connection != null)
                 {
-                    sample[sampleIndex] = PCMU_SILENCE_BYTE_ZERO;
-                    sample[sampleIndex + 1] = PCMU_SILENCE_BYTE_ONE;
+                    annAddr = IPAddress.Parse(announcement.Connection.ConnectionAddress);
                 }
 
-                SendAudioFrame(rtpSampleTimestamp, (int)SDPMediaFormatsEnum.PCMU, sample);
-                rtpSampleTimestamp += _rtpAudioTimestampPeriod;
+                if (announcement.Media == SDPMediaTypesEnum.audio)
+                {
+                    var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
+                    var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
 
-                await Task.Delay(AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+                    SetDestination(SDPMediaTypesEnum.audio, connRtpEndPoint, connRtcpEndPoint);
+
+                    foreach (var mediaFormat in announcement.MediaFormats)
+                    {
+                        if (mediaFormat.FormatAttribute?.StartsWith(TELEPHONE_EVENT_ATTRIBUTE) == true)
+                        {
+                            if (!int.TryParse(mediaFormat.FormatID, out var remoteRtpEventPayloadID))
+                            {
+                                //logger.LogWarning("The media format on the telephone event attribute was not a valid integer.");
+                            }
+                            else
+                            {
+                                base.RemoteRtpEventPayloadID = remoteRtpEventPayloadID;
+                            }
+                            break;
+                        }
+                    }
+                }
+                else if (announcement.Media == SDPMediaTypesEnum.video)
+                {
+                    var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
+                    var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
+
+                    SetDestination(SDPMediaTypesEnum.video, connRtpEndPoint, connRtcpEndPoint);
+                }
             }
         }
     }
