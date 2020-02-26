@@ -16,15 +16,12 @@
 
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Media.Imaging;
-using System.Windows.Threading;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using SIPSorcery.Net;
@@ -112,6 +109,7 @@ namespace SIPSorcery.Media
         private Timer _audioStreamTimer;
 
         private uint _rtpAudioTimestampPeriod = 0;
+        private bool _isStarted = false;
         private bool _isClosed = false;
 
         /// <summary>
@@ -166,28 +164,33 @@ namespace SIPSorcery.Media
         /// </summary>
         public void Start()
         {
-            _waveOutEvent?.Play();
-
-            AudioSourcesEnum audioSource = (_audioSourceOpts != null) ? _audioSourceOpts.AudioSource : AudioSourcesEnum.None;
-
-            if (audioSource == AudioSourcesEnum.Microphone && _waveInEvent != null)
+            if (!_isStarted)
             {
-                _waveInEvent?.StartRecording();
-            }
-            else if (audioSource == AudioSourcesEnum.Silence)
-            {
-                _audioStreamTimer = new Timer(SendSilenceSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
-            }
-            else if (audioSource == AudioSourcesEnum.Music)
-            {
-                _audioStreamTimer = new Timer(SendMusicSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
-            }
+                _isStarted = true;
 
-            VideoSourcesEnum videoSource = (_videoSourceOpts != null) ? _videoSourceOpts.VideoSource : VideoSourcesEnum.None;
+                _waveOutEvent?.Play();
 
-            if (videoSource == VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
-            {
-                _testPatternVideoSource.Start();
+                AudioSourcesEnum audioSource = (_audioSourceOpts != null) ? _audioSourceOpts.AudioSource : AudioSourcesEnum.None;
+
+                if (audioSource == AudioSourcesEnum.Microphone && _waveInEvent != null)
+                {
+                    _waveInEvent?.StartRecording();
+                }
+                else if (audioSource == AudioSourcesEnum.Silence)
+                {
+                    _audioStreamTimer = new Timer(SendSilenceSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+                }
+                else if (audioSource == AudioSourcesEnum.Music)
+                {
+                    _audioStreamTimer = new Timer(SendMusicSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+                }
+
+                VideoSourcesEnum videoSource = (_videoSourceOpts != null) ? _videoSourceOpts.VideoSource : VideoSourcesEnum.None;
+
+                if (videoSource == VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
+                {
+                    _testPatternVideoSource.Start();
+                }
             }
         }
 
@@ -332,7 +335,7 @@ namespace SIPSorcery.Media
         {
             if (videoSourceOpts.VideoSource == VideoSourcesEnum.TestPattern)
             {
-                _testPatternVideoSource = new TestPatternVideoSource();
+                _testPatternVideoSource = new TestPatternVideoSource(videoSourceOpts.SourceFile);
                 _testPatternVideoSource.SampleReady += LocalVideoSampleAvailable;
             }
         }

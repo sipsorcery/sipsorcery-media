@@ -1,7 +1,24 @@
-﻿using System;
+﻿//-----------------------------------------------------------------------------
+// Filename: TestPatternVideoSource.cs
+//
+// Description: An video stream source generated from a static image overlaid
+// with a title and temporal text.
+//
+// Author(s):
+// Aaron Clauson (aaron@sipsorcery.com)
+// 
+// History:
+// 26 Feb 2020	Aaron Clauson	Created, Dublin, Ireland.
+//
+// License: 
+// BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
+//-----------------------------------------------------------------------------
+
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Extensions.Logging;
@@ -12,7 +29,7 @@ namespace SIPSorcery.Media
     public class TestPatternVideoSource : IDisposable
     {
         private static int VIDEO_SAMPLE_PERIOD_MILLISECONDS = 30;
-        private static string TEST_PATTERN_IMAGE_PATH = "media/testpattern.jpeg";
+        private static string FALLBACK_TEST_PATTERN_IMAGE_PATH = "media/testpattern.jpeg";
         private const float TEXT_SIZE_PERCENTAGE = 0.035f;       // height of text as a percentage of the total image height
         private const float TEXT_OUTLINE_REL_THICKNESS = 0.02f; // Black text outline thickness is set as a percentage of text height in pixels
         private const int TEXT_MARGIN_PIXELS = 5;
@@ -29,9 +46,30 @@ namespace SIPSorcery.Media
 
         public event Action<byte[]> SampleReady;
 
-        public TestPatternVideoSource()
+        public TestPatternVideoSource(string testPatternSource)
         {
-            _testPattern = new Bitmap(TEST_PATTERN_IMAGE_PATH);
+            string testPatternPath = testPatternSource;
+
+            if(!String.IsNullOrEmpty(testPatternSource) && !File.Exists(testPatternSource))
+            {
+                logger.LogWarning($"Requested test pattern file could not be found {testPatternSource}.");
+            }
+
+            if (testPatternPath == null)
+            {
+                if (!File.Exists(FALLBACK_TEST_PATTERN_IMAGE_PATH))
+                {
+                    throw new ApplicationException($"The fallback test pattern image file could not be found {FALLBACK_TEST_PATTERN_IMAGE_PATH}.");
+                }
+                else
+                {
+                    testPatternPath = FALLBACK_TEST_PATTERN_IMAGE_PATH;
+                }
+            }
+
+            logger.LogDebug($"Loading test pattern from {testPatternPath}.");
+
+            _testPattern = new Bitmap(testPatternPath);
 
             // Get the stride.
             Rectangle rect = new Rectangle(0, 0, _testPattern.Width, _testPattern.Height);

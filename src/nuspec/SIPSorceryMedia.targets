@@ -7,4 +7,11 @@
       <TargetPath>%(Filename)%(Extension)</TargetPath>
     </ContentWithTargetPath>
   </ItemGroup>
+  <ItemGroup>
+    <MediaFiles Include="$(MSBuildThisFileDirectory)\..\media\*.*" />
+    <ContentWithTargetPath Include="@(MediaFiles)">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <TargetPath>media/%(Filename)%(Extension)</TargetPath>
+    </ContentWithTargetPath>
+  </ItemGroup>
 </Project>
