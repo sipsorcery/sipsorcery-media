@@ -4,7 +4,6 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SIPSorceryMedia;
 
@@ -22,12 +21,11 @@ namespace SIPSorcery.Media
         private static Microsoft.Extensions.Logging.ILogger logger = SIPSorcery.Sys.Log.Logger;
 
         private VpxEncoder _vpxEncoder;
-        private SIPSorceryMedia.ImageConvert _colorConverter;
+        private ImageConvert _colorConverter;
         private Timer _videoStreamTimer;
         private Bitmap _testPattern;
         private uint _width, _height, _stride;
-        private bool _exit = false;
-        private bool _disposedValue = false; // To detect redundant calls
+        private bool _isDisposing = false; // To detect redundant calls
 
         public event Action<byte[]> SampleReady;
 
@@ -59,12 +57,10 @@ namespace SIPSorcery.Media
         public void Start()
         {
             _videoStreamTimer = new Timer(SendTestPatternSample, null, 0, VIDEO_SAMPLE_PERIOD_MILLISECONDS);
-            //Task.Factory.StartNew(SendTestPatternSample, TaskCreationOptions.LongRunning);
         }
 
         public void Stop()
         {
-            _exit = true;
             _videoStreamTimer?.Dispose();
         }
 
@@ -72,7 +68,7 @@ namespace SIPSorcery.Media
         {
             try
             {
-                if (SampleReady != null)
+                if (SampleReady != null && !_isDisposing)
                 {
                     lock (_vpxEncoder)
                     {
@@ -169,23 +165,26 @@ namespace SIPSorcery.Media
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!_disposedValue)
+            if (!_isDisposing)
             {
-                _disposedValue = true;
+                _isDisposing = true;
 
                 if (disposing)
                 {
                     _testPattern.Dispose();
                 }
 
-                _vpxEncoder.Dispose();
-                _vpxEncoder = null;
+                lock (_vpxEncoder)
+                {
+                    // Prevent the encoder being disposed of if it's in the middle of a sample.
+                    _vpxEncoder.Dispose();
+                    _vpxEncoder = null;
+                }
 
                 _colorConverter = null;
             }
         }
 
-        // This code added to correctly implement the disposable pattern.
         public void Dispose()
         {
             Dispose(true);

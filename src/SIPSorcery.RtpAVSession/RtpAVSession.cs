@@ -164,7 +164,7 @@ namespace SIPSorcery.Media
         /// <summary>
         /// Starts the media capturing/source devices.
         /// </summary>
-        public void StartMedia()
+        public void Start()
         {
             _waveOutEvent?.Play();
 
@@ -191,7 +191,85 @@ namespace SIPSorcery.Media
             }
         }
 
-        public void Close()
+        /// <summary>
+        /// Sends a DTMF tone as an RTP event to the remote party.
+        /// </summary>
+        /// <param name="key">The DTMF tone to send.</param>
+        /// <param name="ct">RTP events can span multiple RTP packets. This token can
+        /// be used to cancel the send.</param>
+        public Task SendDtmf(byte key, CancellationToken ct)
+        {
+            var dtmfEvent = new RTPEvent(key, false, RTPEvent.DEFAULT_VOLUME, DTMF_EVENT_DURATION, DTMF_EVENT_PAYLOAD_ID);
+            return SendDtmfEvent(dtmfEvent, ct);
+        }
+
+        /// <summary>
+        /// Send a media sample via RTP.
+        /// </summary>
+        /// <param name="mediaType">The type of media to send (audio or video).</param>
+        /// <param name="samplePeriod">The period measured in sampling units for the sample.</param>
+        /// <param name="sample">The raw sample.</param>
+        public void SendMedia(SDPMediaTypesEnum mediaType, uint samplePeriod, byte[] sample)
+        {
+            throw new NotImplementedException();
+        }
+
+        /// <summary>
+        /// Sets relevant properties for this session based on the SDP from the remote party.
+        /// </summary>
+        /// <param name="sessionDescription">The session description from the remote call party.</param>
+        public override void setRemoteDescription(RTCSessionDescription sessionDescription)
+        {
+            base.setRemoteDescription(sessionDescription);
+
+            var connAddr = IPAddress.Parse(sessionDescription.sdp.Connection.ConnectionAddress);
+
+            foreach (var announcement in sessionDescription.sdp.Media)
+            {
+                var annAddr = connAddr;
+                if (announcement.Connection != null)
+                {
+                    annAddr = IPAddress.Parse(announcement.Connection.ConnectionAddress);
+                }
+
+                if (announcement.Media == SDPMediaTypesEnum.audio)
+                {
+                    var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
+                    var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
+
+                    SetDestination(SDPMediaTypesEnum.audio, connRtpEndPoint, connRtcpEndPoint);
+
+                    foreach (var mediaFormat in announcement.MediaFormats)
+                    {
+                        if (mediaFormat.FormatAttribute?.StartsWith(TELEPHONE_EVENT_ATTRIBUTE) == true)
+                        {
+                            if (!int.TryParse(mediaFormat.FormatID, out var remoteRtpEventPayloadID))
+                            {
+                                //logger.LogWarning("The media format on the telephone event attribute was not a valid integer.");
+                            }
+                            else
+                            {
+                                base.RemoteRtpEventPayloadID = remoteRtpEventPayloadID;
+                            }
+                            break;
+                        }
+                    }
+                }
+                else if (announcement.Media == SDPMediaTypesEnum.video)
+                {
+                    var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
+                    var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
+
+                    SetDestination(SDPMediaTypesEnum.video, connRtpEndPoint, connRtcpEndPoint);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Closes the session.
+        /// </summary>
+        /// <param name="reason">Reason for the closure.</param>
+        public void Close(string reason)
         {
             if (!_isClosed)
             {
@@ -204,7 +282,10 @@ namespace SIPSorcery.Media
                 _audioStreamTimer?.Dispose();
                 _testPatternVideoSource?.Stop();
 
-                base.CloseSession("normal");
+                // The VPX encoder is a memory hog. 
+                _testPatternVideoSource?.Dispose();
+
+                base.CloseSession(reason);
             }
         }
 
@@ -419,68 +500,6 @@ namespace SIPSorcery.Media
             }
 
             SendAudioFrame(bufferSize, (int)SDPMediaFormatsEnum.PCMU, sample);
-        }
-
-        public Task SendDtmf(byte key, CancellationToken cancellationToken = default)
-        {
-            var dtmfEvent = new RTPEvent(key, false, RTPEvent.DEFAULT_VOLUME, DTMF_EVENT_DURATION, DTMF_EVENT_PAYLOAD_ID);
-            return SendDtmfEvent(dtmfEvent, cancellationToken);
-        }
-
-        public void SendMedia(SDPMediaTypesEnum mediaType, uint samplePeriod, byte[] sample)
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Sets relevant properties for this session based on the SDP from the remote party.
-        /// </summary>
-        /// <param name="sessionDescription">The session description from the remote call party.</param>
-        public override void setRemoteDescription(RTCSessionDescription sessionDescription)
-        {
-            base.setRemoteDescription(sessionDescription);
-
-            var connAddr = IPAddress.Parse(sessionDescription.sdp.Connection.ConnectionAddress);
-
-            foreach (var announcement in sessionDescription.sdp.Media)
-            {
-                var annAddr = connAddr;
-                if (announcement.Connection != null)
-                {
-                    annAddr = IPAddress.Parse(announcement.Connection.ConnectionAddress);
-                }
-
-                if (announcement.Media == SDPMediaTypesEnum.audio)
-                {
-                    var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
-                    var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
-
-                    SetDestination(SDPMediaTypesEnum.audio, connRtpEndPoint, connRtcpEndPoint);
-
-                    foreach (var mediaFormat in announcement.MediaFormats)
-                    {
-                        if (mediaFormat.FormatAttribute?.StartsWith(TELEPHONE_EVENT_ATTRIBUTE) == true)
-                        {
-                            if (!int.TryParse(mediaFormat.FormatID, out var remoteRtpEventPayloadID))
-                            {
-                                //logger.LogWarning("The media format on the telephone event attribute was not a valid integer.");
-                            }
-                            else
-                            {
-                                base.RemoteRtpEventPayloadID = remoteRtpEventPayloadID;
-                            }
-                            break;
-                        }
-                    }
-                }
-                else if (announcement.Media == SDPMediaTypesEnum.video)
-                {
-                    var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
-                    var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
-
-                    SetDestination(SDPMediaTypesEnum.video, connRtpEndPoint, connRtcpEndPoint);
-                }
-            }
         }
     }
 }
