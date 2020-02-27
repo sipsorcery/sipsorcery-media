@@ -39,7 +39,7 @@ namespace SIPSorcery.Media
         Silence = 3
     }
 
-    public class AudioSourceOptions
+    public class AudioOptions
     {
         public AudioSourcesEnum AudioSource;
         public string SourceFile;
@@ -52,7 +52,7 @@ namespace SIPSorcery.Media
         TestPattern = 2
     }
 
-    public class VideoSourceOptions
+    public class VideoOptions
     {
         public VideoSourcesEnum VideoSource;
         public string SourceFile;
@@ -60,6 +60,7 @@ namespace SIPSorcery.Media
 
     public class RtpAVSession : RTPSession, IMediaSession
     {
+        public const string DEFAULT_AUDIO_SOURCE_FILE = "media/Macroform_-_Simplicity.ulaw";
         public const string TELEPHONE_EVENT_ATTRIBUTE = "telephone-event";
         public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
         public const int DTMF_EVENT_PAYLOAD_ID = 101;
@@ -76,8 +77,8 @@ namespace SIPSorcery.Media
 
         private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
 
-        private AudioSourceOptions _audioSourceOpts;
-        private VideoSourceOptions _videoSourceOpts;
+        private AudioOptions _audioOpts;
+        private VideoOptions _videoOpts;
 
         /// <summary>
         /// Audio render device.
@@ -123,73 +124,127 @@ namespace SIPSorcery.Media
         /// Forms control.
         /// </summary>
         /// <param name="addrFamily">The address family to create the underlying socket on (IPv4 or IPv6).</param>
-        /// <param name="audioSourceOptions">The options for the audio source.</param>
-        /// <param name="videoSourceOptions">The options for the audio source.</param>
-        public RtpAVSession(AddressFamily addrFamily, AudioSourceOptions audioSourceOptions, VideoSourceOptions videoSourceOptions)
+        /// <param name="audioOptions">Optional. Options for the send and receive audio streams on this session.</param>
+        /// <param name="videoOptions">Optional. Options for the send and receive video streams on this session</param>
+        public RtpAVSession(AddressFamily addrFamily, AudioOptions audioOptions, VideoOptions videoOptions)
             : base(addrFamily, false, false, false)
         {
-            _audioSourceOpts = audioSourceOptions;
-            _videoSourceOpts = videoSourceOptions;
+            _audioOpts = audioOptions;
+            _videoOpts = videoOptions;
 
+            // Initialise the video decoding objects. Even if we are not sourcing video
+            // we need to be ready to receive and render.
             _vpxDecoder = new VpxEncoder();
             int res = _vpxDecoder.InitDecoder();
             if (res != 0)
             {
                 throw new ApplicationException("VPX decoder initialisation failed.");
             }
-
             _imgConverter = new ImageConvert();
 
-            if (_audioSourceOpts != null && _audioSourceOpts.AudioSource != AudioSourcesEnum.None)
+            if (_audioOpts != null && _audioOpts.AudioSource != AudioSourcesEnum.None)
             {
-                MediaStreamTrack videoTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.audio, false, new List<SDPMediaFormat> { new SDPMediaFormat(SDPMediaFormatsEnum.PCMU) });
-                addTrack(videoTrack);
+                var pcmu = new SDPMediaFormat(SDPMediaFormatsEnum.PCMU);
 
-                InitAudio(_audioSourceOpts);
+                // RTP event support.
+                int clockRate = pcmu.GetClockRate();
+                SDPMediaFormat rtpEventFormat = new SDPMediaFormat(DTMF_EVENT_PAYLOAD_ID);
+                rtpEventFormat.SetFormatAttribute($"{TELEPHONE_EVENT_ATTRIBUTE}/{clockRate}");
+                rtpEventFormat.SetFormatParameterAttribute("0-16");
+
+                var audioCapabilities = new List<SDPMediaFormat> { pcmu, rtpEventFormat };
+
+                MediaStreamTrack audioTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.audio, false, audioCapabilities);
+                addTrack(audioTrack);
             }
 
-            if (_videoSourceOpts != null && _videoSourceOpts.VideoSource != VideoSourcesEnum.None)
+            if (_videoOpts != null && _videoOpts.VideoSource != VideoSourcesEnum.None)
             {
                 MediaStreamTrack videoTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.video, false, new List<SDPMediaFormat> { new SDPMediaFormat(SDPMediaFormatsEnum.VP8) });
                 addTrack(videoTrack);
-
-                InitVideo(_videoSourceOpts);
             }
 
             base.OnRtpPacketReceived += RtpPacketReceived;
         }
 
         /// <summary>
+        /// Sets or updates the sources of the audio and/or video streams. 
+        /// </summary>
+        /// <param name="audioOptions">Optional. If audio is being switched the new source options.
+        /// Set to null to leave the audio source unchanged.</param>
+        /// <param name="videoOptions">Optional. If video is being switched the new source options.
+        /// Set to null to leave the video source unchanged.</param>
+        public async Task SetSources(AudioOptions audioOptions, VideoOptions videoOptions)
+        {
+            if (audioOptions == null)
+            {
+                // Do nothing, audio source not being changed.
+            }
+            else if (audioOptions.AudioSource == AudioSourcesEnum.None)
+            {
+                // Audio source no longer required.
+                _waveInEvent?.StopRecording();
+
+                if (_audioStreamTimer != null)
+                {
+                    _audioStreamTimer?.Dispose();
+
+                    // Give any currently executing audio sampling time to complete.
+                    await Task.Delay(AUDIO_SAMPLE_PERIOD_MILLISECONDS * 2).ConfigureAwait(false);
+                }
+
+                _audioStreamReader.Close();
+                _audioOpts = audioOptions;
+            }
+            else
+            {
+                SetAudioSource(audioOptions);
+                _audioOpts = audioOptions;
+                StartAudio();
+            }
+
+            if (videoOptions == null)
+            {
+                // Do nothing, video source not being changed.
+            }
+            else if (videoOptions.VideoSource == VideoSourcesEnum.None)
+            {
+                // Video source no longer required.
+                _testPatternVideoSource?.Stop();
+                _videoOpts = videoOptions;
+            }
+            else
+            {
+
+
+                // Give any currently executing video sampling time to complete.
+                await Task.Delay(TestPatternVideoSource.VIDEO_SAMPLE_PERIOD_MILLISECONDS * 2).ConfigureAwait(false);
+
+                await SetVideoSource(videoOptions).ConfigureAwait(false);
+                _videoOpts = videoOptions;
+                StartVideo();
+            }
+        }
+
+        /// <summary>
         /// Starts the media capturing/source devices.
         /// </summary>
-        public void Start()
+        public async Task Start()
         {
             if (!_isStarted)
             {
                 _isStarted = true;
 
-                _waveOutEvent?.Play();
-
-                AudioSourcesEnum audioSource = (_audioSourceOpts != null) ? _audioSourceOpts.AudioSource : AudioSourcesEnum.None;
-
-                if (audioSource == AudioSourcesEnum.Microphone && _waveInEvent != null)
+                if (_audioOpts != null && _audioOpts.AudioSource != AudioSourcesEnum.None)
                 {
-                    _waveInEvent?.StartRecording();
-                }
-                else if (audioSource == AudioSourcesEnum.Silence)
-                {
-                    _audioStreamTimer = new Timer(SendSilenceSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
-                }
-                else if (audioSource == AudioSourcesEnum.Music)
-                {
-                    _audioStreamTimer = new Timer(SendMusicSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+                    SetAudioSource(_audioOpts);
+                    StartAudio();
                 }
 
-                VideoSourcesEnum videoSource = (_videoSourceOpts != null) ? _videoSourceOpts.VideoSource : VideoSourcesEnum.None;
-
-                if (videoSource == VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
+                if (_videoOpts != null && _videoOpts.VideoSource != VideoSourcesEnum.None)
                 {
-                    _testPatternVideoSource.Start();
+                    await SetVideoSource(_videoOpts).ConfigureAwait(false);
+                    StartVideo();
                 }
             }
         }
@@ -295,48 +350,140 @@ namespace SIPSorcery.Media
         /// <summary>
         /// Initialise the audio capture and render device.
         /// </summary>
-        private void InitAudio(AudioSourceOptions audioSourceOpts)
+        private void SetAudioSource(AudioOptions audioSourceOpts)
         {
             // Render device.
-            _waveOutEvent = new WaveOutEvent();
-            _waveProvider = new BufferedWaveProvider(_waveFormat);
-            _waveProvider.DiscardOnBufferOverflow = true;
-            _waveOutEvent.Init(_waveProvider);
+            if (_waveOutEvent == null)
+            {
+                _waveOutEvent = new WaveOutEvent();
+                _waveProvider = new BufferedWaveProvider(_waveFormat);
+                _waveProvider.DiscardOnBufferOverflow = true;
+                _waveOutEvent.Init(_waveProvider);
+            }
 
             // Audio source.
             if (audioSourceOpts.AudioSource == AudioSourcesEnum.Microphone)
             {
-                if (WaveInEvent.DeviceCount > 0)
+                if (_waveInEvent == null)
                 {
-                    _waveInEvent = new WaveInEvent();
-                    _waveInEvent.BufferMilliseconds = AUDIO_SAMPLE_PERIOD_MILLISECONDS;
-                    _waveInEvent.NumberOfBuffers = 1;
-                    _waveInEvent.DeviceNumber = 0;
-                    _waveInEvent.WaveFormat = _waveFormat;
-                    _waveInEvent.DataAvailable += LocalAudioSampleAvailable;
-                }
-                else
-                {
-                    Log.LogWarning("No audio capture devices are available. No audio stream will be sent.");
+                    if (WaveInEvent.DeviceCount > 0)
+                    {
+                        _waveInEvent = new WaveInEvent();
+                        _waveInEvent.BufferMilliseconds = AUDIO_SAMPLE_PERIOD_MILLISECONDS;
+                        _waveInEvent.NumberOfBuffers = 1;
+                        _waveInEvent.DeviceNumber = 0;
+                        _waveInEvent.WaveFormat = _waveFormat;
+                        _waveInEvent.DataAvailable += LocalAudioSampleAvailable;
+                    }
+                    else
+                    {
+                        Log.LogWarning("No audio capture devices are available. No audio stream will be sent.");
+                    }
                 }
             }
             else if (audioSourceOpts.AudioSource == AudioSourcesEnum.Music)
             {
-                _audioStreamReader = new StreamReader(_audioSourceOpts.SourceFile);
+                string newAudioFile = audioSourceOpts.SourceFile ?? DEFAULT_AUDIO_SOURCE_FILE;
+
+                // Check whether the source file is the same. If it is there's no need to do anything.
+                if (newAudioFile != _audioOpts.SourceFile)
+                {
+                    if (!File.Exists(newAudioFile))
+                    {
+                        if (File.Exists(DEFAULT_AUDIO_SOURCE_FILE))
+                        {
+                            Log.LogWarning($"The requested audio source file could not be found {newAudioFile}, falling back to default.");
+                            newAudioFile = DEFAULT_AUDIO_SOURCE_FILE;
+                        }
+                        else
+                        {
+                            Log.LogError($"The requested audio source file could not be found {newAudioFile}, no audio source will be initialised.");
+                            newAudioFile = null;
+                        }
+                    }
+
+                    if (newAudioFile != null)
+                    {
+                        _audioStreamReader = new StreamReader(newAudioFile);
+                    }
+                }
             }
 
-            _rtpAudioTimestampPeriod = (uint)(SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.PCMU) / AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+            if (_rtpAudioTimestampPeriod == 0)
+            {
+                _rtpAudioTimestampPeriod = (uint)(SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.PCMU) / AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+            }
+        }
+
+        private void StartAudio()
+        {
+            // Audio rendering (speaker).
+            if (_waveOutEvent != null && _waveOutEvent.PlaybackState != PlaybackState.Playing)
+            {
+                _waveOutEvent.Play();
+            }
+
+            // If required start the audio source.
+            if (_audioOpts != null && _audioOpts.AudioSource != AudioSourcesEnum.None)
+            {
+                if (_audioOpts.AudioSource == AudioSourcesEnum.Microphone)
+                {
+                    // Don't need the stream or silence sampling.
+                    if (_audioStreamTimer != null)
+                    {
+                        _audioStreamTimer?.Dispose();
+                    }
+
+                    _waveInEvent?.StartRecording();
+                }
+                else if (_audioOpts.AudioSource == AudioSourcesEnum.Silence)
+                {
+                    _waveInEvent?.StopRecording();
+                    _audioStreamTimer = new Timer(SendSilenceSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+                }
+                else if (_audioOpts.AudioSource == AudioSourcesEnum.Music)
+                {
+                    _waveInEvent?.StopRecording();
+
+                    if (_audioStreamReader == null)
+                    {
+                        Log.LogWarning("Could not start audio music source as the file stream reader was null.");
+                    }
+                    else
+                    {
+                        _audioStreamTimer = new Timer(SendMusicSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+                    }
+                }
+            }
         }
 
         /// <summary>
         /// Initialise the video capture and render device.
         /// </summary>
-        private void InitVideo(VideoSourceOptions videoSourceOpts)
+        private async Task SetVideoSource(VideoOptions videoSourceOpts)
         {
             if (videoSourceOpts.VideoSource == VideoSourcesEnum.TestPattern)
             {
-                _testPatternVideoSource = new TestPatternVideoSource(videoSourceOpts.SourceFile);
-                _testPatternVideoSource.SampleReady += LocalVideoSampleAvailable;
+                if (_testPatternVideoSource == null)
+                {
+                    _testPatternVideoSource = new TestPatternVideoSource(videoSourceOpts.SourceFile);
+                    _testPatternVideoSource.SampleReady += LocalVideoSampleAvailable;
+                }
+                else
+                {
+                    // Stop video sampling while the source is changed.
+                    _testPatternVideoSource?.Stop();
+
+                    await _testPatternVideoSource.SwitchSource(videoSourceOpts.SourceFile).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private void StartVideo()
+        {
+            if (_videoOpts != null && _videoOpts.VideoSource == VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
+            {
+                _testPatternVideoSource.Start();
             }
         }
 
@@ -430,7 +577,7 @@ namespace SIPSorcery.Media
                             }
                             else
                             {
-                                if(OnVideoSampleReady != null)
+                                if (OnVideoSampleReady != null)
                                 {
                                     fixed (byte* r = i420)
                                     {
@@ -467,8 +614,7 @@ namespace SIPSorcery.Media
         }
 
         /// <summary>
-        /// Sends the sounds of silence. If the destination is on the other side of a NAT this is useful to open
-        /// a pinhole and hopefully get the remote RTP stream through.
+        /// Sends audio samples read from a file.
         /// </summary>
         private void SendMusicSample(object state)
         {
@@ -486,8 +632,7 @@ namespace SIPSorcery.Media
         }
 
         /// <summary>
-        /// Sends the sounds of silence. If the destination is on the other side of a NAT this is useful to open
-        /// a pinhole and hopefully get the remote RTP stream through.
+        /// Sends the sounds of silence.
         /// </summary>
         private void SendSilenceSample(object state)
         {

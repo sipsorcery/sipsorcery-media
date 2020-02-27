@@ -21,6 +21,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using SIPSorceryMedia;
 
@@ -28,7 +29,7 @@ namespace SIPSorcery.Media
 {
     public class TestPatternVideoSource : IDisposable
     {
-        private static int VIDEO_SAMPLE_PERIOD_MILLISECONDS = 30;
+        public static int VIDEO_SAMPLE_PERIOD_MILLISECONDS = 33;
         private static string FALLBACK_TEST_PATTERN_IMAGE_PATH = "media/testpattern.jpeg";
         private const float TEXT_SIZE_PERCENTAGE = 0.035f;       // height of text as a percentage of the total image height
         private const float TEXT_OUTLINE_REL_THICKNESS = 0.02f; // Black text outline thickness is set as a percentage of text height in pixels
@@ -40,6 +41,7 @@ namespace SIPSorcery.Media
         private VpxEncoder _vpxEncoder;
         private ImageConvert _colorConverter;
         private Timer _videoStreamTimer;
+        private string _testPatternPath;
         private Bitmap _testPattern;
         private uint _width, _height, _stride;
         private bool _isDisposing = false; // To detect redundant calls
@@ -48,14 +50,14 @@ namespace SIPSorcery.Media
 
         public TestPatternVideoSource(string testPatternSource)
         {
-            string testPatternPath = testPatternSource;
+            _testPatternPath = testPatternSource;
 
             if(!String.IsNullOrEmpty(testPatternSource) && !File.Exists(testPatternSource))
             {
                 logger.LogWarning($"Requested test pattern file could not be found {testPatternSource}.");
             }
 
-            if (testPatternPath == null)
+            if (_testPatternPath == null)
             {
                 if (!File.Exists(FALLBACK_TEST_PATTERN_IMAGE_PATH))
                 {
@@ -63,13 +65,13 @@ namespace SIPSorcery.Media
                 }
                 else
                 {
-                    testPatternPath = FALLBACK_TEST_PATTERN_IMAGE_PATH;
+                    _testPatternPath = FALLBACK_TEST_PATTERN_IMAGE_PATH;
                 }
             }
 
-            logger.LogDebug($"Loading test pattern from {testPatternPath}.");
+            logger.LogDebug($"Loading test pattern from {_testPatternPath}.");
 
-            _testPattern = new Bitmap(testPatternPath);
+            _testPattern = new Bitmap(_testPatternPath);
 
             // Get the stride.
             Rectangle rect = new Rectangle(0, 0, _testPattern.Width, _testPattern.Height);
@@ -100,6 +102,23 @@ namespace SIPSorcery.Media
         public void Stop()
         {
             _videoStreamTimer?.Dispose();
+        }
+
+        public async Task SwitchSource(string newSource)
+        {
+            if(newSource != null && File.Exists(newSource) && _testPatternPath != newSource)
+            {
+                _videoStreamTimer?.Dispose();
+
+                await Task.Delay(VIDEO_SAMPLE_PERIOD_MILLISECONDS * 2);
+
+                // TODO: We're relying on the new source being the same dimensions. Need to add a check for that.
+                _testPatternPath = newSource;
+                _testPattern?.Dispose();
+                _testPattern = new Bitmap(_testPatternPath);
+
+                Start();
+            }
         }
 
         public void SendTestPatternSample(object state)
