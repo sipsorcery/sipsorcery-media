@@ -10,15 +10,6 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|netcoreapp3.1|AnyCPU'">
-    <OutputPath>..\x64\Release</OutputPath>
-    <PlatformTarget>x64</PlatformTarget>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|netcoreapp3.1|x86'">
-    <OutputPath>..\Win32\Release</OutputPath>
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="NAudio" Version="1.10.0" />
     <PackageReference Include="SIPSorcery" Version="4.0.27-pre" />
@@ -27,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SIPSorcery.Media.vcxproj" />
+    <ProjectReference Include="..\src\SIPSorcery.Media.vcxproj" />
   </ItemGroup>
 
   <ItemGroup>

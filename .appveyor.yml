@@ -30,8 +30,8 @@ install:
 build_script:
 - ps: |
       nuget restore -DisableParallelProcessing src\SIPSorceryMedia.sln
-      msbuild /m src\SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=Win32 /t:clean,build
-      msbuild /m src\SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=x64 /t:clean,build
+      msbuild src\SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=Win32 /t:clean,build
+      msbuild src\SIPSorceryMedia.sln /p:Configuration=Release /p:Platform=x64 /t:clean,build
 after_build:
 - ps: |
        Write-Host "APPVEYOR_REPO_TAG=$env:APPVEYOR_REPO_TAG."
