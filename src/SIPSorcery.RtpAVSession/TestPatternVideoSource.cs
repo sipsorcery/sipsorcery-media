@@ -29,7 +29,8 @@ namespace SIPSorcery.Media
 {
     public class TestPatternVideoSource : IDisposable
     {
-        public static int VIDEO_SAMPLE_PERIOD_MILLISECONDS = 33;
+        public const int DEFAULT_FRAMES_PER_SECOND = 30;
+
         private static string FALLBACK_TEST_PATTERN_IMAGE_PATH = "media/testpattern.jpeg";
         private const float TEXT_SIZE_PERCENTAGE = 0.035f;       // height of text as a percentage of the total image height
         private const float TEXT_OUTLINE_REL_THICKNESS = 0.02f; // Black text outline thickness is set as a percentage of text height in pixels
@@ -42,17 +43,29 @@ namespace SIPSorcery.Media
         private ImageConvert _colorConverter;
         private Timer _videoStreamTimer;
         private string _testPatternPath;
+        private int _framesPerSecond;
+        private int _samplePeriod;
         private Bitmap _testPattern;
         private uint _width, _height, _stride;
         private bool _isDisposing = false; // To detect redundant calls
 
+        /// <summary>
+        /// The current frame rate being used to generate the test pattern.
+        /// </summary>
+        public int FramesPerSecond
+        {
+            get { return _framesPerSecond; }
+        }
+
         public event Action<byte[]> SampleReady;
 
-        public TestPatternVideoSource(string testPatternSource)
+        public TestPatternVideoSource(string testPatternSource, int framesPerSecond)
         {
             _testPatternPath = testPatternSource;
+            _framesPerSecond = (framesPerSecond > 0 && framesPerSecond <= DEFAULT_FRAMES_PER_SECOND) ? framesPerSecond : DEFAULT_FRAMES_PER_SECOND;
+            _samplePeriod = 1000 / framesPerSecond;
 
-            if(!String.IsNullOrEmpty(testPatternSource) && !File.Exists(testPatternSource))
+            if (!String.IsNullOrEmpty(testPatternSource) && !File.Exists(testPatternSource))
             {
                 logger.LogWarning($"Requested test pattern file could not be found {testPatternSource}.");
             }
@@ -96,7 +109,7 @@ namespace SIPSorcery.Media
 
         public void Start()
         {
-            _videoStreamTimer = new Timer(SendTestPatternSample, null, 0, VIDEO_SAMPLE_PERIOD_MILLISECONDS);
+            _videoStreamTimer = new Timer(SendTestPatternSample, null, 0, _samplePeriod);
         }
 
         public void Stop()
@@ -104,20 +117,23 @@ namespace SIPSorcery.Media
             _videoStreamTimer?.Dispose();
         }
 
-        public async Task SwitchSource(string newSource)
+        public async Task SetSource(string newSource, int framesPerSecond)
         {
-            if(newSource != null && File.Exists(newSource) && _testPatternPath != newSource)
-            {
-                _videoStreamTimer?.Dispose();
+            _framesPerSecond = (framesPerSecond > 0 && framesPerSecond <= DEFAULT_FRAMES_PER_SECOND) ? framesPerSecond : DEFAULT_FRAMES_PER_SECOND;
+            _samplePeriod = 1000 / framesPerSecond;
 
-                await Task.Delay(VIDEO_SAMPLE_PERIOD_MILLISECONDS * 2);
+            if (newSource != null && File.Exists(newSource) && _testPatternPath != newSource)
+            {
+                if (_videoStreamTimer != null)
+                {
+                    _videoStreamTimer?.Dispose();
+                    await Task.Delay(_samplePeriod * 2).ConfigureAwait(false);
+                }
 
                 // TODO: We're relying on the new source being the same dimensions. Need to add a check for that.
                 _testPatternPath = newSource;
                 _testPattern?.Dispose();
                 _testPattern = new Bitmap(_testPatternPath);
-
-                Start();
             }
         }
 

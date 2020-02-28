@@ -41,7 +41,14 @@ namespace SIPSorcery.Media
 
     public class AudioOptions
     {
+        /// <summary>
+        /// The type of audio source to use.
+        /// </summary>
         public AudioSourcesEnum AudioSource;
+
+        /// <summary>
+        /// If using a pre-recorded audio source this is the audio source file.
+        /// </summary>
         public string SourceFile;
     }
 
@@ -54,18 +61,34 @@ namespace SIPSorcery.Media
 
     public class VideoOptions
     {
+        public const int DEFAULT_FRAME_RATE = 30;
+
+        /// <summary>
+        /// The type of video source to use.
+        /// </summary>
         public VideoSourcesEnum VideoSource;
+
+        /// <summary>
+        /// IF using a video test pattern this is the base image source file.
+        /// </summary>
         public string SourceFile;
+
+        /// <summary>
+        /// The frame rate to apply to request for the video source. May not be
+        /// applied for certain sources such as a live webcam feed.
+        /// </summary>
+        public int SourceFramesPerSecond = DEFAULT_FRAME_RATE;
     }
 
     public class RtpAVSession : RTPSession, IMediaSession
     {
         public const string DEFAULT_AUDIO_SOURCE_FILE = "media/Macroform_-_Simplicity.ulaw";
+        public static string VIDEO_TESTPATTERN = "media/testpattern.jpeg";
+        public static string VIDEO_ONHOLD_TESTPATTERN = "media/testpattern_inverted.jpeg";
         public const string TELEPHONE_EVENT_ATTRIBUTE = "telephone-event";
         public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
         public const int DTMF_EVENT_PAYLOAD_ID = 101;
         private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 30;
-        private const int VP8_TIMESTAMP_SPACING = 3000;
 
         /// <summary>
         /// PCMU encoding for silence, http://what-when-how.com/voip/g-711-compression-voip/
@@ -76,6 +99,9 @@ namespace SIPSorcery.Media
         private static Microsoft.Extensions.Logging.ILogger Log = SIPSorcery.Sys.Log.Logger;
 
         private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
+
+        public static AudioOptions DefaultAudioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.Microphone };
+        public static VideoOptions DefaultVideoOptions = new VideoOptions { VideoSource = VideoSourcesEnum.None };
 
         private AudioOptions _audioOpts;
         private VideoOptions _videoOpts;
@@ -98,6 +124,7 @@ namespace SIPSorcery.Media
         private byte[] _currVideoFrame = new byte[65536];
         private int _currVideoFramePosn = 0;
 
+        // Fields for decoding received RTP video packets.
         private VpxEncoder _vpxDecoder;
         private ImageConvert _imgConverter;
 
@@ -110,6 +137,7 @@ namespace SIPSorcery.Media
         private Timer _audioStreamTimer;
 
         private uint _rtpAudioTimestampPeriod = 0;
+        private uint _rtpVideoTimestampPeriod = 0;
         private bool _isStarted = false;
         private bool _isClosed = false;
 
@@ -120,17 +148,25 @@ namespace SIPSorcery.Media
         public event Action<byte[], uint, uint, int> OnVideoSampleReady;
 
         /// <summary>
-        /// Creates a new RTP audio visual session where the remote video stream will be rendered to a Windows
-        /// Forms control.
+        /// Creates a new RTP audio visual session with audio/video capturing and rendering capabilities.
+        /// Uses default options for audio and video.
         /// </summary>
         /// <param name="addrFamily">The address family to create the underlying socket on (IPv4 or IPv6).</param>
-        /// <param name="audioOptions">Optional. Options for the send and receive audio streams on this session.</param>
-        /// <param name="videoOptions">Optional. Options for the send and receive video streams on this session</param>
+        public RtpAVSession(AddressFamily addrFamily) :
+           this(addrFamily, DefaultAudioOptions, DefaultVideoOptions)
+        { }
+
+        /// <summary>
+        /// Creates a new RTP audio visual session with audio/video capturing and rendering capabilities.
+        /// </summary>
+        /// <param name="addrFamily">The address family to create the underlying socket on (IPv4 or IPv6).</param>
+        /// <param name="audioOptions">Options for the send and receive audio streams on this session.</param>
+        /// <param name="videoOptions">Options for the send and receive video streams on this session</param>
         public RtpAVSession(AddressFamily addrFamily, AudioOptions audioOptions, VideoOptions videoOptions)
             : base(addrFamily, false, false, false)
         {
-            _audioOpts = audioOptions;
-            _videoOpts = videoOptions;
+            _audioOpts = audioOptions ?? DefaultAudioOptions;
+            _videoOpts = videoOptions ?? DefaultVideoOptions;
 
             // Initialise the video decoding objects. Even if we are not sourcing video
             // we need to be ready to receive and render.
@@ -142,7 +178,7 @@ namespace SIPSorcery.Media
             }
             _imgConverter = new ImageConvert();
 
-            if (_audioOpts != null && _audioOpts.AudioSource != AudioSourcesEnum.None)
+            if (_audioOpts.AudioSource != AudioSourcesEnum.None)
             {
                 var pcmu = new SDPMediaFormat(SDPMediaFormatsEnum.PCMU);
 
@@ -158,12 +194,13 @@ namespace SIPSorcery.Media
                 addTrack(audioTrack);
             }
 
-            if (_videoOpts != null && _videoOpts.VideoSource != VideoSourcesEnum.None)
+            if (_videoOpts.VideoSource != VideoSourcesEnum.None)
             {
                 MediaStreamTrack videoTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.video, false, new List<SDPMediaFormat> { new SDPMediaFormat(SDPMediaFormatsEnum.VP8) });
                 addTrack(videoTrack);
             }
 
+            // Where the magic (for processing received media) happens.
             base.OnRtpPacketReceived += RtpPacketReceived;
         }
 
@@ -215,11 +252,6 @@ namespace SIPSorcery.Media
             }
             else
             {
-
-
-                // Give any currently executing video sampling time to complete.
-                await Task.Delay(TestPatternVideoSource.VIDEO_SAMPLE_PERIOD_MILLISECONDS * 2).ConfigureAwait(false);
-
                 await SetVideoSource(videoOptions).ConfigureAwait(false);
                 _videoOpts = videoOptions;
                 StartVideo();
@@ -235,13 +267,13 @@ namespace SIPSorcery.Media
             {
                 _isStarted = true;
 
-                if (_audioOpts != null && _audioOpts.AudioSource != AudioSourcesEnum.None)
+                if (_audioOpts.AudioSource != AudioSourcesEnum.None)
                 {
                     SetAudioSource(_audioOpts);
                     StartAudio();
                 }
 
-                if (_videoOpts != null && _videoOpts.VideoSource != VideoSourcesEnum.None)
+                if (_videoOpts.VideoSource != VideoSourcesEnum.None)
                 {
                     await SetVideoSource(_videoOpts).ConfigureAwait(false);
                     StartVideo();
@@ -336,12 +368,25 @@ namespace SIPSorcery.Media
                 base.OnRtpPacketReceived -= RtpPacketReceived;
 
                 _waveOutEvent?.Stop();
-                _waveInEvent?.StopRecording();
+
+                if (_waveInEvent != null)
+                {
+                    _waveInEvent.DataAvailable -= LocalAudioSampleAvailable;
+                    _waveInEvent.StopRecording();
+                }
+
                 _audioStreamTimer?.Dispose();
-                _testPatternVideoSource?.Stop();
+
+                if (_testPatternVideoSource != null)
+                {
+                    _testPatternVideoSource.SampleReady -= LocalVideoSampleAvailable;
+                    _testPatternVideoSource.Stop();
+                    _testPatternVideoSource.Dispose();
+                }
 
                 // The VPX encoder is a memory hog. 
-                _testPatternVideoSource?.Dispose();
+                _vpxDecoder.Dispose();
+                _imgConverter.Dispose();
 
                 base.CloseSession(reason);
             }
@@ -385,8 +430,8 @@ namespace SIPSorcery.Media
             {
                 string newAudioFile = audioSourceOpts.SourceFile ?? DEFAULT_AUDIO_SOURCE_FILE;
 
-                // Check whether the source file is the same. If it is there's no need to do anything.
-                if (newAudioFile != _audioOpts.SourceFile)
+                // Check whether this is the initial load or whether the source file is the same. If it is there's no need to do anything.
+                if (_audioStreamReader == null || newAudioFile != _audioOpts.SourceFile)
                 {
                     if (!File.Exists(newAudioFile))
                     {
@@ -415,6 +460,10 @@ namespace SIPSorcery.Media
             }
         }
 
+        /// <summary>
+        /// Once the audio devices have been initialised this method needs to be called to start the
+        /// audio rendering device and if a source has been selected it will also get started.
+        /// </summary>
         private void StartAudio()
         {
             // Audio rendering (speaker).
@@ -426,6 +475,8 @@ namespace SIPSorcery.Media
             // If required start the audio source.
             if (_audioOpts != null && _audioOpts.AudioSource != AudioSourcesEnum.None)
             {
+                _waveInEvent?.StopRecording();
+
                 if (_audioOpts.AudioSource == AudioSourcesEnum.Microphone)
                 {
                     // Don't need the stream or silence sampling.
@@ -434,17 +485,23 @@ namespace SIPSorcery.Media
                         _audioStreamTimer?.Dispose();
                     }
 
-                    _waveInEvent?.StartRecording();
+                    try
+                    {
+                        _waveInEvent.StartRecording();
+                    }
+                    // Even though we've requested a recording be stopped this call occasionally 
+                    // throws saying recording has already started.
+                    catch (Exception excp) 
+                    {
+                        Log.LogDebug($"Exception was thrown starting microphone, should be safe to ignore. {excp.Message}");
+                    } 
                 }
                 else if (_audioOpts.AudioSource == AudioSourcesEnum.Silence)
                 {
-                    _waveInEvent?.StopRecording();
                     _audioStreamTimer = new Timer(SendSilenceSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
                 }
                 else if (_audioOpts.AudioSource == AudioSourcesEnum.Music)
                 {
-                    _waveInEvent?.StopRecording();
-
                     if (_audioStreamReader == null)
                     {
                         Log.LogWarning("Could not start audio music source as the file stream reader was null.");
@@ -466,22 +523,31 @@ namespace SIPSorcery.Media
             {
                 if (_testPatternVideoSource == null)
                 {
-                    _testPatternVideoSource = new TestPatternVideoSource(videoSourceOpts.SourceFile);
+                    _testPatternVideoSource = new TestPatternVideoSource(videoSourceOpts.SourceFile, videoSourceOpts.SourceFramesPerSecond);
                     _testPatternVideoSource.SampleReady += LocalVideoSampleAvailable;
                 }
                 else
                 {
-                    // Stop video sampling while the source is changed.
-                    _testPatternVideoSource?.Stop();
+                    await _testPatternVideoSource.SetSource(videoSourceOpts.SourceFile, videoSourceOpts.SourceFramesPerSecond).ConfigureAwait(false);
+                }
 
-                    await _testPatternVideoSource.SwitchSource(videoSourceOpts.SourceFile).ConfigureAwait(false);
+                if (_testPatternVideoSource.FramesPerSecond != 0)
+                {
+                    _rtpVideoTimestampPeriod = (uint)(SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.VP8) / _testPatternVideoSource.FramesPerSecond);
+                }
+                else
+                {
+                    _rtpVideoTimestampPeriod = (uint)(SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.VP8) / TestPatternVideoSource.DEFAULT_FRAMES_PER_SECOND);
                 }
             }
         }
 
+        /// <summary>
+        /// Once the video source has been initialised this method needs to be called to start it.
+        /// </summary>
         private void StartVideo()
         {
-            if (_videoOpts != null && _videoOpts.VideoSource == VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
+            if (_videoOpts.VideoSource == VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
             {
                 _testPatternVideoSource.Start();
             }
@@ -509,7 +575,7 @@ namespace SIPSorcery.Media
         /// </summary>
         private void LocalVideoSampleAvailable(byte[] sample)
         {
-            base.SendVp8Frame(VP8_TIMESTAMP_SPACING, (int)SDPMediaFormatsEnum.VP8, sample);
+            base.SendVp8Frame(_rtpVideoTimestampPeriod, (int)SDPMediaFormatsEnum.VP8, sample);
         }
 
         /// <summary>
@@ -537,12 +603,15 @@ namespace SIPSorcery.Media
         /// <param name="rtpPacket">The RTP packet containing the audio payload.</param>
         private void RenderAudio(RTPPacket rtpPacket)
         {
-            var sample = rtpPacket.Payload;
-            for (int index = 0; index < sample.Length; index++)
+            if (_waveProvider != null)
             {
-                short pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
-                byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                _waveProvider.AddSamples(pcmSample, 0, 2);
+                var sample = rtpPacket.Payload;
+                for (int index = 0; index < sample.Length; index++)
+                {
+                    short pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+                    byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                    _waveProvider.AddSamples(pcmSample, 0, 2);
+                }
             }
         }
 
