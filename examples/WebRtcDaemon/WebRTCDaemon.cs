@@ -38,7 +38,7 @@
 //[dn]
 //CN = localhost
 //[x509_ext]
-//subjectAltName = localhost, IP:127.0.0.1, IP:::1 
+//subjectAltName = DNS:localhost, IP:127.0.0.1, IP:::1 
 //keyUsage = Digital Signature, Key Encipherment, Data Encipherment
 //extendedKeyUsage = TLS Web Server Authentication
 //

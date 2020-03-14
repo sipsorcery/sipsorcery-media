@@ -16,12 +16,16 @@
 
 using System;
 using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
+using AudioScope;
 using Microsoft.Extensions.Logging;
 using NAudio.Wave;
 using SIPSorcery.Net;
@@ -56,7 +60,8 @@ namespace SIPSorcery.Media
     {
         None = 0,
         Webcam = 1,
-        TestPattern = 2
+        TestPattern = 2,
+        ExternalBitmap = 3, // For example audio scope visualisations.
     }
 
     public class VideoOptions
@@ -78,6 +83,8 @@ namespace SIPSorcery.Media
         /// applied for certain sources such as a live webcam feed.
         /// </summary>
         public int SourceFramesPerSecond = DEFAULT_FRAME_RATE;
+
+        public IBitmapSource BitmapSource;
     }
 
     public class RtpAVSession : RTPSession, IMediaSession
@@ -89,6 +96,7 @@ namespace SIPSorcery.Media
         public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
         public const int DTMF_EVENT_PAYLOAD_ID = 101;
         private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 30;
+        private const int MAX_ENCODED_VIDEO_FRAME_SIZE = 65536;
 
         /// <summary>
         /// PCMU encoding for silence, http://what-when-how.com/voip/g-711-compression-voip/
@@ -99,6 +107,7 @@ namespace SIPSorcery.Media
         private static Microsoft.Extensions.Logging.ILogger Log = SIPSorcery.Sys.Log.Logger;
 
         private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
+        //private static readonly WaveFormat _audioScopeWaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(8000, 1);
 
         public static AudioOptions DefaultAudioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.Microphone };
         public static VideoOptions DefaultVideoOptions = new VideoOptions { VideoSource = VideoSourcesEnum.None };
@@ -121,12 +130,18 @@ namespace SIPSorcery.Media
         /// </summary>
         private WaveInEvent _waveInEvent;
 
-        private byte[] _currVideoFrame = new byte[65536];
+        private byte[] _currVideoFrame = new byte[MAX_ENCODED_VIDEO_FRAME_SIZE];
         private int _currVideoFramePosn = 0;
 
         // Fields for decoding received RTP video packets.
         private VpxEncoder _vpxDecoder;
         private ImageConvert _imgConverter;
+
+        // Fields for encoding any bitmap sources for transmission to remote
+        // call party.
+        private VpxEncoder _vpxEncoder;
+        private ImageConvert _imgEncConverter;
+        private int _extBmpWidth, _extBmpHeight, _extBmpStride;
 
         /// <summary>
         /// Dummy video source which supplies a test pattern with a rolling 
@@ -146,6 +161,23 @@ namespace SIPSorcery.Media
         /// [sample, width, height, stride].
         /// </summary>
         public event Action<byte[], uint, uint, int> OnVideoSampleReady;
+
+        /// <summary>
+        /// Fired when an audio sample is ready for the audio scope (which serves
+        /// as a visual representation of the audio). Note the audio signal should
+        /// already have been played. This event is for an optional visual representation
+        /// of the same signal.
+        /// [sample in IEEE float format].
+        /// </summary>
+        public event Action<Complex[]> OnAudioScopeSampleReady;
+
+        /// <summary>
+        /// Fired when an audio sample generated from the on hold music is ready for 
+        /// the audio scope (which serves as a visual representation of the audio).
+        /// This audio scope is used to send an on hold video to the remote call party.
+        /// [sample in IEEE float format].
+        /// </summary>
+        public event Action<Complex[]> OnHoldAudioScopeSampleReady;
 
         /// <summary>
         /// Creates a new RTP audio visual session with audio/video capturing and rendering capabilities.
@@ -213,6 +245,20 @@ namespace SIPSorcery.Media
         /// Set to null to leave the video source unchanged.</param>
         public async Task SetSources(AudioOptions audioOptions, VideoOptions videoOptions)
         {
+            // Check whether the underlying media session has changed which dictates whether
+            // an audio or video source needs to be removed.
+            if(!HasAudio)
+            {
+                // Overrule any application supplied options as the session does not currently support audio.
+                audioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.None };
+            }
+
+            if(!HasVideo)
+            {
+                // Overrule any application supplied options as the session does not currently support video.
+               videoOptions = new VideoOptions { VideoSource = VideoSourcesEnum.None };
+            }
+
             if (audioOptions == null)
             {
                 // Do nothing, audio source not being changed.
@@ -230,7 +276,7 @@ namespace SIPSorcery.Media
                     await Task.Delay(AUDIO_SAMPLE_PERIOD_MILLISECONDS * 2).ConfigureAwait(false);
                 }
 
-                _audioStreamReader.Close();
+                _audioStreamReader?.Close();
                 _audioOpts = audioOptions;
             }
             else
@@ -248,6 +294,10 @@ namespace SIPSorcery.Media
             {
                 // Video source no longer required.
                 _testPatternVideoSource?.Stop();
+                if (_videoOpts.BitmapSource != null)
+                {
+                    _videoOpts.BitmapSource.OnBitmap -= LocalBitmapAvailable;
+                }
                 _videoOpts = videoOptions;
             }
             else
@@ -322,7 +372,7 @@ namespace SIPSorcery.Media
                     annAddr = IPAddress.Parse(announcement.Connection.ConnectionAddress);
                 }
 
-                if (announcement.Media == SDPMediaTypesEnum.audio)
+                if (this.HasAudio && announcement.Media == SDPMediaTypesEnum.audio)
                 {
                     var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
                     var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
@@ -345,7 +395,7 @@ namespace SIPSorcery.Media
                         }
                     }
                 }
-                else if (announcement.Media == SDPMediaTypesEnum.video)
+                else if (this.HasVideo && announcement.Media == SDPMediaTypesEnum.video)
                 {
                     var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
                     var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
@@ -387,6 +437,9 @@ namespace SIPSorcery.Media
                 // The VPX encoder is a memory hog. 
                 _vpxDecoder.Dispose();
                 _imgConverter.Dispose();
+
+                _vpxEncoder?.Dispose();
+                _imgEncConverter?.Dispose();
 
                 base.CloseSession(reason);
             }
@@ -519,6 +572,18 @@ namespace SIPSorcery.Media
         /// </summary>
         private async Task SetVideoSource(VideoOptions videoSourceOpts)
         {
+            if (videoSourceOpts.VideoSource != VideoSourcesEnum.ExternalBitmap && _videoOpts.BitmapSource != null)
+            {
+                _videoOpts.BitmapSource.OnBitmap -= LocalBitmapAvailable;
+            }
+
+            if(videoSourceOpts.VideoSource != VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
+            {
+                _testPatternVideoSource.SampleReady -= LocalVideoSampleAvailable;
+                _testPatternVideoSource.Stop();
+                _testPatternVideoSource = null;
+            }
+
             if (videoSourceOpts.VideoSource == VideoSourcesEnum.TestPattern)
             {
                 if (_testPatternVideoSource == null)
@@ -539,6 +604,10 @@ namespace SIPSorcery.Media
                 {
                     _rtpVideoTimestampPeriod = (uint)(SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.VP8) / TestPatternVideoSource.DEFAULT_FRAMES_PER_SECOND);
                 }
+            }
+            else if(videoSourceOpts.VideoSource == VideoSourcesEnum.ExternalBitmap)
+            {
+                videoSourceOpts.BitmapSource.OnBitmap += LocalBitmapAvailable;
             }
         }
 
@@ -568,6 +637,56 @@ namespace SIPSorcery.Media
             }
 
             base.SendAudioFrame((uint)sample.Length, (int)SDPMediaFormatsEnum.PCMU, sample);
+        }
+
+        /// <summary>
+        /// Used when the video source is originating as bitmaps produced locally. For example
+        /// the audio scope generates bitmaps in response to an audio signal. The generated bitmaps 
+        /// then need to be encoded and transmitted to the remote party.
+        /// </summary>
+        /// <param name="bmp">The locally generated bitmap to transmit to the remote party.</param>
+        private void LocalBitmapAvailable(Bitmap bmp)
+        {
+            if (_vpxEncoder == null)
+            {
+                _extBmpWidth = bmp.Width;
+                _extBmpHeight = bmp.Height;
+                _extBmpStride = (int)VideoUtils.GetStride(bmp);
+
+                _vpxEncoder = new VpxEncoder();
+                int res = _vpxEncoder.InitEncoder((uint)bmp.Width, (uint)bmp.Height, (uint)_extBmpStride);
+                if (res != 0)
+                {
+                    throw new ApplicationException("VPX encoder initialisation failed.");
+                }
+                _imgEncConverter = new ImageConvert();
+            }
+
+            var sampleBuffer = VideoUtils.BitmapToRGB24(bmp);
+
+            unsafe
+            {
+                fixed (byte* p = sampleBuffer)
+                {
+                    byte[] convertedFrame = null;
+                    _imgEncConverter.ConvertRGBtoYUV(p, VideoSubTypesEnum.BGR24, _extBmpWidth, _extBmpHeight, _extBmpStride, VideoSubTypesEnum.I420, ref convertedFrame);
+
+                    fixed (byte* q = convertedFrame)
+                    {
+                        byte[] encodedBuffer = null;
+                        int encodeResult = _vpxEncoder.Encode(q, convertedFrame.Length, 1, ref encodedBuffer);
+
+                        if (encodeResult != 0)
+                        {
+                            throw new ApplicationException("VPX encode of video sample failed.");
+                        }
+
+                        base.SendVp8Frame(_rtpVideoTimestampPeriod, (int)SDPMediaFormatsEnum.VP8, encodedBuffer);
+                    }
+                }
+            }
+
+            bmp.Dispose();
         }
 
         /// <summary>
@@ -606,12 +725,18 @@ namespace SIPSorcery.Media
             if (_waveProvider != null)
             {
                 var sample = rtpPacket.Payload;
+                Complex[] rawSamples = new Complex[sample.Length];
+
                 for (int index = 0; index < sample.Length; index++)
                 {
                     short pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
                     byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
                     _waveProvider.AddSamples(pcmSample, 0, 2);
+                    
+                    rawSamples[index] = pcm / 32768f;
                 }
+
+                OnAudioScopeSampleReady?.Invoke(rawSamples);
             }
         }
 
@@ -698,6 +823,24 @@ namespace SIPSorcery.Media
             }
 
             SendAudioFrame((uint)bytesRead, (int)SDPMediaFormatsEnum.PCMU, sample.Take(bytesRead).ToArray());
+
+            #region On hold audio scope.
+
+            if (OnHoldAudioScopeSampleReady != null)
+            {
+                Complex[] ieeeSamples = new Complex[sample.Length];
+
+                for (int index = 0; index < sample.Length; index++)
+                {
+                    short pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+                    byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                    ieeeSamples[index] = pcm / 32768f;
+                }
+
+                OnHoldAudioScopeSampleReady(ieeeSamples.ToArray());
+            }
+
+            #endregion
         }
 
         /// <summary>

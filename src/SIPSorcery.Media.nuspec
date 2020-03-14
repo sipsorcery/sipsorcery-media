@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>4.0.28-pre</version>
+    <version>4.0.29-pre</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -11,7 +11,8 @@
     <projectUrl>https://github.com/sipsorcery/sipsorcery-media</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
     <description>The SIPSorcery package for WebRTC plumbing and Windows audio and video capture.</description>
-	<releaseNotes>- v4.0.15-4.0.28-pre: Big rework of RTP and Audio/Video integration.
+	<releaseNotes>- v4.0.29-pre: Added AudioScope sound wave visualisation.
+- v4.0.15-4.0.28-pre: Big rework of RTP and Audio/Video integration.
 - v4.0.14-pre: Added RtpAVSession.
 - v4.0.13-pre: Added stride to image conversion function to support WebRTC receive.
 - v4.0.9-pre: Bug fix relating to sampling video capture device.
@@ -25,9 +26,13 @@
     <tags>WebRTC MediaFoundation DTLS SRTP</tags>
 	<repository type="git" url="https://github.com/sipsorcery/sipsorcery-media" branch="master" />
 	<dependencies>
+	    <dependency id="MathNet.Filtering" version="0.6.0" />
+		<dependency id="MathNet.Numerics" version="4.9.0" />
 		<dependency id="NAudio" version="1.10.0" />
-		<dependency id="SIPSorcery" version="4.0.23-pre" />
+		<dependency id="SharpGL" version="2.4.1.2" />
+		<dependency id="SIPSorcery" version="4.0.29-pre" />
 		<dependency id="System.Drawing.Common" version="4.7.0" />
+		<dependency id="System.Drawing.Primitives" version="4.3.0" />
 	</dependencies>
   </metadata>
   <files>
@@ -38,5 +43,8 @@
 	<file src="RtpAVSession\bin\Release\netcoreapp3.1\SIPSorcery.RtpAVSession.dll" target="build\x64" />
 	<file src="RtpAVSession\bin\x86\Release\netcoreapp3.1\SIPSorcery.RtpAVSession.dll" target="build\x86" />
 	<file src="RtpAVSession\media\*.*" target="media" />
+	<file src="AudioScope\bin\Release\netcoreapp3.1\AudioScope.dll" target="build\x64" />
+	<file src="AudioScope\bin\Release\netcoreapp3.1\AudioScope.dll" target="build\x86" />
+	<file src="AudioScope\shaders\*.*" target="shaders" />
   </files>
 </package>

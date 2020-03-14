@@ -14,4 +14,11 @@
       <TargetPath>media/%(Filename)%(Extension)</TargetPath>
     </ContentWithTargetPath>
   </ItemGroup>
+  <ItemGroup>
+    <ShaderFiles Include="$(MSBuildThisFileDirectory)\..\shaders\*.*" />
+    <ContentWithTargetPath Include="@(ShaderFiles)">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <TargetPath>shaders/%(Filename)%(Extension)</TargetPath>
+    </ContentWithTargetPath>
+  </ItemGroup>
 </Project>

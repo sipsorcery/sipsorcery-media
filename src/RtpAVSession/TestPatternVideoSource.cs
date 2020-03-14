@@ -152,7 +152,7 @@ namespace SIPSorcery.Media
 
                             var stampedTestPattern = _testPattern.Clone() as System.Drawing.Image;
                             AddTimeStampAndLocation(stampedTestPattern, DateTime.UtcNow.ToString("dd MMM yyyy HH:mm:ss:fff"), "Test Pattern");
-                            sampleBuffer = BitmapToRGB24(stampedTestPattern as System.Drawing.Bitmap);
+                            sampleBuffer = VideoUtils.BitmapToRGB24(stampedTestPattern as System.Drawing.Bitmap);
 
                             fixed (byte* p = sampleBuffer)
                             {
@@ -180,27 +180,6 @@ namespace SIPSorcery.Media
             catch (Exception excp)
             {
                 logger.LogError("Exception SendTestPatternSample. " + excp);
-            }
-        }
-
-        private static byte[] BitmapToRGB24(Bitmap bitmap)
-        {
-            try
-            {
-                BitmapData bitmapData = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
-                var length = bitmapData.Stride * bitmapData.Height;
-
-                byte[] bytes = new byte[length];
-
-                // Copy bitmap to byte[]
-                Marshal.Copy(bitmapData.Scan0, bytes, 0, length);
-                bitmap.UnlockBits(bitmapData);
-
-                return bytes;
-            }
-            catch (Exception)
-            {
-                return new byte[] { };
             }
         }
 
