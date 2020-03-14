@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\sipsorcery-prototypes\AudioScope\AudioScope\AudioScope.csproj" />
+    <ProjectReference Include="..\AudioScope\AudioScope.csproj" />
     <ProjectReference Include="..\SIPSorcery.Media.vcxproj" />
   </ItemGroup>
 
