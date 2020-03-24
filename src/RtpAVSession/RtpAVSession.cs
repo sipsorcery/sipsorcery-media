@@ -54,6 +54,8 @@ namespace SIPSorcery.Media
         /// If using a pre-recorded audio source this is the audio source file.
         /// </summary>
         public string SourceFile;
+
+        public List<SDPMediaFormatsEnum> AudioCodecs;
     }
 
     public enum VideoSourcesEnum
@@ -92,7 +94,6 @@ namespace SIPSorcery.Media
         public const string DEFAULT_AUDIO_SOURCE_FILE = "media/Macroform_-_Simplicity.ulaw";
         public static string VIDEO_TESTPATTERN = "media/testpattern.jpeg";
         public static string VIDEO_ONHOLD_TESTPATTERN = "media/testpattern_inverted.jpeg";
-        public const string TELEPHONE_EVENT_ATTRIBUTE = "telephone-event";
         public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
         public const int DTMF_EVENT_PAYLOAD_ID = 101;
         private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 30;
@@ -200,6 +201,12 @@ namespace SIPSorcery.Media
             _audioOpts = audioOptions ?? DefaultAudioOptions;
             _videoOpts = videoOptions ?? DefaultVideoOptions;
 
+            if (_audioOpts != null && _audioOpts.AudioCodecs != null &&
+                _audioOpts.AudioCodecs.Any(x => !(x == SDPMediaFormatsEnum.PCMU || x == SDPMediaFormatsEnum.PCMA)))
+            {
+                throw new ApplicationException("Only PCMA and PCMU are supported for audio codec options.");
+            }
+
             // Initialise the video decoding objects. Even if we are not sourcing video
             // we need to be ready to receive and render.
             _vpxDecoder = new VpxEncoder();
@@ -220,7 +227,18 @@ namespace SIPSorcery.Media
                 rtpEventFormat.SetFormatAttribute($"{TELEPHONE_EVENT_ATTRIBUTE}/{clockRate}");
                 rtpEventFormat.SetFormatParameterAttribute("0-16");
 
-                var audioCapabilities = new List<SDPMediaFormat> { pcmu, rtpEventFormat };
+                var audioCapabilities = new List<SDPMediaFormat> { rtpEventFormat };
+                if(_audioOpts.AudioCodecs == null || _audioOpts.AudioCodecs.Count == 0)
+                {
+                    audioCapabilities.Add(pcmu);
+                }
+                else
+                {
+                    foreach(var codec in _audioOpts.AudioCodecs)
+                    {
+                        audioCapabilities.Add(new SDPMediaFormat(codec));
+                    }
+                }
 
                 MediaStreamTrack audioTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.audio, false, audioCapabilities);
                 addTrack(audioTrack);
@@ -729,10 +747,21 @@ namespace SIPSorcery.Media
 
                 for (int index = 0; index < sample.Length; index++)
                 {
-                    short pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
-                    byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                    _waveProvider.AddSamples(pcmSample, 0, 2);
-                    
+                    short pcm = 0;
+
+                    if (rtpPacket.Header.PayloadType == (int)SDPMediaFormatsEnum.PCMA)
+                    {
+                        pcm = NAudio.Codecs.ALawDecoder.ALawToLinearSample(sample[index]);
+                        byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                        _waveProvider.AddSamples(pcmSample, 0, 2);
+                    }
+                    else
+                    {
+                        pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+                        byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                        _waveProvider.AddSamples(pcmSample, 0, 2);
+                    }
+
                     rawSamples[index] = pcm / 32768f;
                 }
 
