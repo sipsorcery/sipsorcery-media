@@ -184,9 +184,8 @@ namespace SIPSorcery.Media
         /// Creates a new RTP audio visual session with audio/video capturing and rendering capabilities.
         /// Uses default options for audio and video.
         /// </summary>
-        /// <param name="addrFamily">The address family to create the underlying socket on (IPv4 or IPv6).</param>
-        public RtpAVSession(AddressFamily addrFamily) :
-           this(addrFamily, DefaultAudioOptions, DefaultVideoOptions)
+        public RtpAVSession() :
+           this(DefaultAudioOptions, DefaultVideoOptions)
         { }
 
         /// <summary>
@@ -195,8 +194,8 @@ namespace SIPSorcery.Media
         /// <param name="addrFamily">The address family to create the underlying socket on (IPv4 or IPv6).</param>
         /// <param name="audioOptions">Options for the send and receive audio streams on this session.</param>
         /// <param name="videoOptions">Options for the send and receive video streams on this session</param>
-        public RtpAVSession(AddressFamily addrFamily, AudioOptions audioOptions, VideoOptions videoOptions)
-            : base(addrFamily, false, false, false)
+        public RtpAVSession(AudioOptions audioOptions, VideoOptions videoOptions)
+            : base(false, false, false)
         {
             _audioOpts = audioOptions ?? DefaultAudioOptions;
             _videoOpts = videoOptions ?? DefaultVideoOptions;

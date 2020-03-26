@@ -5,10 +5,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="AudioScopeOpenGL.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="AudioScopeOpenGL.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="MathNet.Filtering" Version="0.6.0" />
     <PackageReference Include="MathNet.Numerics" Version="4.9.0" />
     <PackageReference Include="NAudio" Version="1.10.0" />
-    <PackageReference Include="SharpGL" Version="2.4.1.2" />
+    <!--<PackageReference Include="SharpGL" Version="2.4.1.2" />-->
     <PackageReference Include="System.Drawing.Common" Version="4.7.0" />
     <PackageReference Include="System.Drawing.Primitives" Version="4.3.0" />
   </ItemGroup>
@@ -21,15 +29,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="shaders\line.vert">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="shaders\line\line.frag">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="shaders\line\line.geom">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="shaders\line\line.vert">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
