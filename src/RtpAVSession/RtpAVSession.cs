@@ -46,6 +46,11 @@ namespace SIPSorcery.Media
     public class AudioOptions
     {
         /// <summary>
+        /// NAudio uses -1 to indicate the default system speaker should be used for playback.
+        /// </summary>
+        public const int DEFAULT_OUTPUTDEVICE_INDEX = -1;
+
+        /// <summary>
         /// The type of audio source to use.
         /// </summary>
         public AudioSourcesEnum AudioSource;
@@ -53,9 +58,11 @@ namespace SIPSorcery.Media
         /// <summary>
         /// If using a pre-recorded audio source this is the audio source file.
         /// </summary>
-        public string SourceFile;
+        public Dictionary<SDPMediaFormatsEnum, string> SourceFiles;
 
         public List<SDPMediaFormatsEnum> AudioCodecs;
+
+        public int OutputDeviceIndex = DEFAULT_OUTPUTDEVICE_INDEX;
     }
 
     public enum VideoSourcesEnum
@@ -91,7 +98,8 @@ namespace SIPSorcery.Media
 
     public class RtpAVSession : RTPSession, IMediaSession
     {
-        public const string DEFAULT_AUDIO_SOURCE_FILE = "media/Macroform_-_Simplicity.ulaw";
+        public const string PCMU_AUDIO_SOURCE_FILE = "media/Macroform_-_Simplicity.ulaw";
+        public const string PCMA_AUDIO_SOURCE_FILE = "media/Macroform_-_Simplicity.alaw";
         public static string VIDEO_TESTPATTERN = "media/testpattern.jpeg";
         public static string VIDEO_ONHOLD_TESTPATTERN = "media/testpattern_inverted.jpeg";
         public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
@@ -104,6 +112,8 @@ namespace SIPSorcery.Media
         /// </summary>
         private static readonly byte PCMU_SILENCE_BYTE_ZERO = 0x7F;
         private static readonly byte PCMU_SILENCE_BYTE_ONE = 0xFF;
+        private static readonly byte PCMA_SILENCE_BYTE_ZERO = 0x55;
+        private static readonly byte PCMA_SILENCE_BYTE_ONE = 0xD5;
 
         private static Microsoft.Extensions.Logging.ILogger Log = SIPSorcery.Sys.Log.Logger;
 
@@ -154,6 +164,8 @@ namespace SIPSorcery.Media
 
         private uint _rtpAudioTimestampPeriod = 0;
         private uint _rtpVideoTimestampPeriod = 0;
+        private SDPMediaFormat _sendingAudioFormat = null;
+        private SDPMediaFormat _sendingVideoFormat = null;
         private bool _isStarted = false;
         private bool _isClosed = false;
 
@@ -223,17 +235,17 @@ namespace SIPSorcery.Media
                 // RTP event support.
                 int clockRate = pcmu.GetClockRate();
                 SDPMediaFormat rtpEventFormat = new SDPMediaFormat(DTMF_EVENT_PAYLOAD_ID);
-                rtpEventFormat.SetFormatAttribute($"{TELEPHONE_EVENT_ATTRIBUTE}/{clockRate}");
+                rtpEventFormat.SetFormatAttribute($"{SDP.TELEPHONE_EVENT_ATTRIBUTE}/{clockRate}");
                 rtpEventFormat.SetFormatParameterAttribute("0-16");
 
                 var audioCapabilities = new List<SDPMediaFormat> { rtpEventFormat };
-                if(_audioOpts.AudioCodecs == null || _audioOpts.AudioCodecs.Count == 0)
+                if (_audioOpts.AudioCodecs == null || _audioOpts.AudioCodecs.Count == 0)
                 {
                     audioCapabilities.Add(pcmu);
                 }
                 else
                 {
-                    foreach(var codec in _audioOpts.AudioCodecs)
+                    foreach (var codec in _audioOpts.AudioCodecs)
                     {
                         audioCapabilities.Add(new SDPMediaFormat(codec));
                     }
@@ -264,16 +276,16 @@ namespace SIPSorcery.Media
         {
             // Check whether the underlying media session has changed which dictates whether
             // an audio or video source needs to be removed.
-            if(!HasAudio)
+            if (!HasAudio)
             {
                 // Overrule any application supplied options as the session does not currently support audio.
                 audioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.None };
             }
 
-            if(!HasVideo)
+            if (!HasVideo)
             {
                 // Overrule any application supplied options as the session does not currently support video.
-               videoOptions = new VideoOptions { VideoSource = VideoSourcesEnum.None };
+                videoOptions = new VideoOptions { VideoSource = VideoSourcesEnum.None };
             }
 
             if (audioOptions == null)
@@ -328,11 +340,13 @@ namespace SIPSorcery.Media
         /// <summary>
         /// Starts the media capturing/source devices.
         /// </summary>
-        public async Task Start()
+        public override async Task Start()
         {
             if (!_isStarted)
             {
                 _isStarted = true;
+
+                await base.Start();
 
                 if (_audioOpts.AudioSource != AudioSourcesEnum.None)
                 {
@@ -358,68 +372,6 @@ namespace SIPSorcery.Media
         {
             var dtmfEvent = new RTPEvent(key, false, RTPEvent.DEFAULT_VOLUME, DTMF_EVENT_DURATION, DTMF_EVENT_PAYLOAD_ID);
             return SendDtmfEvent(dtmfEvent, ct);
-        }
-
-        /// <summary>
-        /// Send a media sample via RTP.
-        /// </summary>
-        /// <param name="mediaType">The type of media to send (audio or video).</param>
-        /// <param name="samplePeriod">The period measured in sampling units for the sample.</param>
-        /// <param name="sample">The raw sample.</param>
-        public void SendMedia(SDPMediaTypesEnum mediaType, uint samplePeriod, byte[] sample)
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Sets relevant properties for this session based on the SDP from the remote party.
-        /// </summary>
-        /// <param name="sessionDescription">The session description from the remote call party.</param>
-        public override void setRemoteDescription(RTCSessionDescription sessionDescription)
-        {
-            base.setRemoteDescription(sessionDescription);
-
-            var connAddr = IPAddress.Parse(sessionDescription.sdp.Connection.ConnectionAddress);
-
-            foreach (var announcement in sessionDescription.sdp.Media)
-            {
-                var annAddr = connAddr;
-                if (announcement.Connection != null)
-                {
-                    annAddr = IPAddress.Parse(announcement.Connection.ConnectionAddress);
-                }
-
-                if (this.HasAudio && announcement.Media == SDPMediaTypesEnum.audio)
-                {
-                    var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
-                    var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
-
-                    SetDestination(SDPMediaTypesEnum.audio, connRtpEndPoint, connRtcpEndPoint);
-
-                    foreach (var mediaFormat in announcement.MediaFormats)
-                    {
-                        if (mediaFormat.FormatAttribute?.StartsWith(TELEPHONE_EVENT_ATTRIBUTE) == true)
-                        {
-                            if (!int.TryParse(mediaFormat.FormatID, out var remoteRtpEventPayloadID))
-                            {
-                                //logger.LogWarning("The media format on the telephone event attribute was not a valid integer.");
-                            }
-                            else
-                            {
-                                base.RemoteRtpEventPayloadID = remoteRtpEventPayloadID;
-                            }
-                            break;
-                        }
-                    }
-                }
-                else if (this.HasVideo && announcement.Media == SDPMediaTypesEnum.video)
-                {
-                    var connRtpEndPoint = new IPEndPoint(annAddr, announcement.Port);
-                    var connRtcpEndPoint = new IPEndPoint(annAddr, announcement.Port + 1);
-
-                    SetDestination(SDPMediaTypesEnum.video, connRtpEndPoint, connRtcpEndPoint);
-                }
-            }
         }
 
         /// <summary>
@@ -471,6 +423,7 @@ namespace SIPSorcery.Media
             if (_waveOutEvent == null)
             {
                 _waveOutEvent = new WaveOutEvent();
+                _waveOutEvent.DeviceNumber = (_audioOpts != null) ? _audioOpts.OutputDeviceIndex : AudioOptions.DEFAULT_OUTPUTDEVICE_INDEX;
                 _waveProvider = new BufferedWaveProvider(_waveFormat);
                 _waveProvider.DiscardOnBufferOverflow = true;
                 _waveOutEvent.Init(_waveProvider);
@@ -496,33 +449,6 @@ namespace SIPSorcery.Media
                     }
                 }
             }
-            else if (audioSourceOpts.AudioSource == AudioSourcesEnum.Music)
-            {
-                string newAudioFile = audioSourceOpts.SourceFile ?? DEFAULT_AUDIO_SOURCE_FILE;
-
-                // Check whether this is the initial load or whether the source file is the same. If it is there's no need to do anything.
-                if (_audioStreamReader == null || newAudioFile != _audioOpts.SourceFile)
-                {
-                    if (!File.Exists(newAudioFile))
-                    {
-                        if (File.Exists(DEFAULT_AUDIO_SOURCE_FILE))
-                        {
-                            Log.LogWarning($"The requested audio source file could not be found {newAudioFile}, falling back to default.");
-                            newAudioFile = DEFAULT_AUDIO_SOURCE_FILE;
-                        }
-                        else
-                        {
-                            Log.LogError($"The requested audio source file could not be found {newAudioFile}, no audio source will be initialised.");
-                            newAudioFile = null;
-                        }
-                    }
-
-                    if (newAudioFile != null)
-                    {
-                        _audioStreamReader = new StreamReader(newAudioFile);
-                    }
-                }
-            }
 
             if (_rtpAudioTimestampPeriod == 0)
             {
@@ -536,6 +462,8 @@ namespace SIPSorcery.Media
         /// </summary>
         private void StartAudio()
         {
+            _sendingAudioFormat = base.GetSendingFormat(SDPMediaTypesEnum.audio);
+
             // Audio rendering (speaker).
             if (_waveOutEvent != null && _waveOutEvent.PlaybackState != PlaybackState.Playing)
             {
@@ -561,24 +489,36 @@ namespace SIPSorcery.Media
                     }
                     // Even though we've requested a recording be stopped this call occasionally 
                     // throws saying recording has already started.
-                    catch (Exception excp) 
+                    catch (Exception excp)
                     {
                         Log.LogDebug($"Exception was thrown starting microphone, should be safe to ignore. {excp.Message}");
-                    } 
+                    }
                 }
                 else if (_audioOpts.AudioSource == AudioSourcesEnum.Silence)
                 {
                     _audioStreamTimer = new Timer(SendSilenceSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
                 }
-                else if (_audioOpts.AudioSource == AudioSourcesEnum.Music)
+                else if (_audioOpts.AudioSource == AudioSourcesEnum.Music && _audioOpts.SourceFiles != null &&
+                   _audioOpts.SourceFiles.ContainsKey(_sendingAudioFormat.FormatCodec))
                 {
-                    if (_audioStreamReader == null)
+                    string newAudioFile = _audioOpts.SourceFiles[_sendingAudioFormat.FormatCodec];
+
+                    if (!File.Exists(newAudioFile))
                     {
-                        Log.LogWarning("Could not start audio music source as the file stream reader was null.");
+                        Log.LogError($"The requested audio source file could not be found {newAudioFile}, no audio source will be initialised.");
                     }
                     else
                     {
-                        _audioStreamTimer = new Timer(SendMusicSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+                        _audioStreamReader = new StreamReader(newAudioFile);
+
+                        if (_audioStreamReader == null)
+                        {
+                            Log.LogWarning("Could not start audio music source as the file stream reader was null.");
+                        }
+                        else
+                        {
+                            _audioStreamTimer = new Timer(SendMusicSample, null, 0, AUDIO_SAMPLE_PERIOD_MILLISECONDS);
+                        }
                     }
                 }
             }
@@ -594,7 +534,7 @@ namespace SIPSorcery.Media
                 _videoOpts.BitmapSource.OnBitmap -= LocalBitmapAvailable;
             }
 
-            if(videoSourceOpts.VideoSource != VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
+            if (videoSourceOpts.VideoSource != VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
             {
                 _testPatternVideoSource.SampleReady -= LocalVideoSampleAvailable;
                 _testPatternVideoSource.Stop();
@@ -622,7 +562,7 @@ namespace SIPSorcery.Media
                     _rtpVideoTimestampPeriod = (uint)(SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.VP8) / TestPatternVideoSource.DEFAULT_FRAMES_PER_SECOND);
                 }
             }
-            else if(videoSourceOpts.VideoSource == VideoSourcesEnum.ExternalBitmap)
+            else if (videoSourceOpts.VideoSource == VideoSourcesEnum.ExternalBitmap)
             {
                 videoSourceOpts.BitmapSource.OnBitmap += LocalBitmapAvailable;
             }
@@ -635,6 +575,8 @@ namespace SIPSorcery.Media
         {
             if (_videoOpts.VideoSource == VideoSourcesEnum.TestPattern && _testPatternVideoSource != null)
             {
+                _sendingVideoFormat = base.GetSendingFormat(SDPMediaTypesEnum.video);
+
                 _testPatternVideoSource.Start();
             }
         }
@@ -649,11 +591,19 @@ namespace SIPSorcery.Media
 
             for (int index = 0; index < args.BytesRecorded; index += 2)
             {
-                var ulawByte = NAudio.Codecs.MuLawEncoder.LinearToMuLawSample(BitConverter.ToInt16(args.Buffer, index));
-                sample[sampleIndex++] = ulawByte;
+                if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMU)
+                {
+                    var ulawByte = NAudio.Codecs.MuLawEncoder.LinearToMuLawSample(BitConverter.ToInt16(args.Buffer, index));
+                    sample[sampleIndex++] = ulawByte;
+                }
+                else if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMA)
+                {
+                    var alawByte = NAudio.Codecs.ALawEncoder.LinearToALawSample(BitConverter.ToInt16(args.Buffer, index));
+                    sample[sampleIndex++] = alawByte;
+                }
             }
 
-            base.SendAudioFrame((uint)sample.Length, (int)SDPMediaFormatsEnum.PCMU, sample);
+            base.SendAudioFrame((uint)sample.Length, Convert.ToInt32(_sendingAudioFormat.FormatID), sample);
         }
 
         /// <summary>
@@ -711,7 +661,7 @@ namespace SIPSorcery.Media
         /// </summary>
         private void LocalVideoSampleAvailable(byte[] sample)
         {
-            base.SendVp8Frame(_rtpVideoTimestampPeriod, (int)SDPMediaFormatsEnum.VP8, sample);
+            base.SendVp8Frame(_rtpVideoTimestampPeriod, Convert.ToInt32(_sendingVideoFormat.FormatID), sample);
         }
 
         /// <summary>
@@ -883,11 +833,19 @@ namespace SIPSorcery.Media
 
             for (int index = 0; index < bufferSize; index += 2)
             {
-                sample[sampleIndex] = PCMU_SILENCE_BYTE_ZERO;
-                sample[sampleIndex + 1] = PCMU_SILENCE_BYTE_ONE;
+                if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMU)
+                {
+                    sample[sampleIndex] = PCMU_SILENCE_BYTE_ZERO;
+                    sample[sampleIndex + 1] = PCMU_SILENCE_BYTE_ONE;
+                }
+                else if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMA)
+                {
+                    sample[sampleIndex] = PCMA_SILENCE_BYTE_ZERO;
+                    sample[sampleIndex + 1] = PCMA_SILENCE_BYTE_ONE;
+                }
             }
 
-            SendAudioFrame(bufferSize, (int)SDPMediaFormatsEnum.PCMU, sample);
+            SendAudioFrame(bufferSize, Convert.ToInt32(_sendingAudioFormat.FormatID), sample);
         }
     }
 }
