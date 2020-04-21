@@ -238,7 +238,7 @@ namespace SIPSorcery.Media
                 rtpEventFormat.SetFormatAttribute($"{SDP.TELEPHONE_EVENT_ATTRIBUTE}/{clockRate}");
                 rtpEventFormat.SetFormatParameterAttribute("0-16");
 
-                var audioCapabilities = new List<SDPMediaFormat> { rtpEventFormat };
+                var audioCapabilities = new List<SDPMediaFormat>();
                 if (_audioOpts.AudioCodecs == null || _audioOpts.AudioCodecs.Count == 0)
                 {
                     audioCapabilities.Add(pcmu);
@@ -250,6 +250,7 @@ namespace SIPSorcery.Media
                         audioCapabilities.Add(new SDPMediaFormat(codec));
                     }
                 }
+                audioCapabilities.Add(rtpEventFormat);
 
                 MediaStreamTrack audioTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.audio, false, audioCapabilities);
                 addTrack(audioTrack);
