@@ -105,6 +105,7 @@ namespace SIPSorcery.Media
         public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
         public const int DTMF_EVENT_PAYLOAD_ID = 101;
         private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 30;
+        private const int AUDIO_INPUT_BUFFERS = 2;          // See https://github.com/sipsorcery/sipsorcery/pull/148.
         private const int MAX_ENCODED_VIDEO_FRAME_SIZE = 65536;
 
         /// <summary>
@@ -439,7 +440,7 @@ namespace SIPSorcery.Media
                     {
                         _waveInEvent = new WaveInEvent();
                         _waveInEvent.BufferMilliseconds = AUDIO_SAMPLE_PERIOD_MILLISECONDS;
-                        _waveInEvent.NumberOfBuffers = 1;
+                        _waveInEvent.NumberOfBuffers = AUDIO_INPUT_BUFFERS;
                         _waveInEvent.DeviceNumber = 0;
                         _waveInEvent.WaveFormat = _waveFormat;
                         _waveInEvent.DataAvailable += LocalAudioSampleAvailable;

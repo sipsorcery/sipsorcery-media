@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>4.0.42-pre</version>
+    <version>4.0.43-pre</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -11,7 +11,8 @@
     <projectUrl>https://github.com/sipsorcery/sipsorcery-media</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
     <description>The SIPSorcery package for WebRTC plumbing and Windows audio and video capture.</description>
-	<releaseNotes>- v4.0.42-pre: Adjusted order to codecs in SDP to place RTP event format last.
+	<releaseNotes>- v4.0.43-pre: Increased NAudio input buffers from 1 to 2..
+- v4.0.42-pre: Adjusted order to codecs in SDP to place RTP event format last.
 - v4.0.41-pre: Added audio output device index option.
 - v4.0.34-pre: Adjustments for RTPSession constructor change. Disabled Audio Scope OpenGL functionality.
 - v4.0.31-pre: Added ALAW support to RtpAVSession.
@@ -33,8 +34,7 @@
 	    <dependency id="MathNet.Filtering" version="0.6.0" />
 		<dependency id="MathNet.Numerics" version="4.9.0" />
 		<dependency id="NAudio" version="1.10.0" />
-		<!--<dependency id="SharpGL" version="2.4.1.2" />-->
-		<dependency id="SIPSorcery" version="4.0.42-pre" />
+		<dependency id="SIPSorcery" version="4.0.43-pre" />
 		<dependency id="System.Drawing.Common" version="4.7.0" />
 		<dependency id="System.Drawing.Primitives" version="4.3.0" />
 	</dependencies>
