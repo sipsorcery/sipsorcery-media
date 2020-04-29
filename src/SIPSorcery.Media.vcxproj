@@ -133,6 +133,11 @@
     <ClCompile Include="Srtp.cpp" />
     <ClCompile Include="VpxEncoder.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\sipsorcery-core\src\SIPSorcery.csproj">
+      <Project>{f93a491f-595d-4664-b086-f65d0df9dc8a}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

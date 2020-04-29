@@ -15,6 +15,7 @@
 //-----------------------------------------------------------------------------
 
 using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -104,9 +105,13 @@ namespace SIPSorcery.Media
         public static string VIDEO_ONHOLD_TESTPATTERN = "media/testpattern_inverted.jpeg";
         public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
         public const int DTMF_EVENT_PAYLOAD_ID = 101;
-        private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 30;
-        private const int AUDIO_INPUT_BUFFERS = 2;          // See https://github.com/sipsorcery/sipsorcery/pull/148.
+        private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 20;
         private const int MAX_ENCODED_VIDEO_FRAME_SIZE = 65536;
+
+        // NAudio Parameters.
+        private int BITS_PER_SAMPLE = 16;
+        private int CHANNEL_COUNT = 1;
+        private const int INPUT_BUFFERS = 2;          // See https://github.com/sipsorcery/sipsorcery/pull/148.
 
         /// <summary>
         /// PCMU encoding for silence, http://what-when-how.com/voip/g-711-compression-voip/
@@ -117,9 +122,6 @@ namespace SIPSorcery.Media
         private static readonly byte PCMA_SILENCE_BYTE_ONE = 0xD5;
 
         private static Microsoft.Extensions.Logging.ILogger Log = SIPSorcery.Sys.Log.Logger;
-
-        private static readonly WaveFormat _waveFormat = new WaveFormat(8000, 16, 1);
-        //private static readonly WaveFormat _audioScopeWaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(8000, 1);
 
         public static AudioOptions DefaultAudioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.Microphone };
         public static VideoOptions DefaultVideoOptions = new VideoOptions { VideoSource = VideoSourcesEnum.None };
@@ -170,6 +172,12 @@ namespace SIPSorcery.Media
         private bool _isStarted = false;
         private bool _isClosed = false;
 
+        // Codec related.
+        private G722Codec _g722Encode;
+        private G722CodecState _g722EncodeState;
+        private G722Codec _g722Decode;
+        private G722CodecState _g722DecodeState;
+
         /// <summary>
         /// Fired when a video sample is ready for rendering.
         /// [sample, width, height, stride].
@@ -214,9 +222,9 @@ namespace SIPSorcery.Media
             _videoOpts = videoOptions ?? DefaultVideoOptions;
 
             if (_audioOpts != null && _audioOpts.AudioCodecs != null &&
-                _audioOpts.AudioCodecs.Any(x => !(x == SDPMediaFormatsEnum.PCMU || x == SDPMediaFormatsEnum.PCMA)))
+                _audioOpts.AudioCodecs.Any(x => !(x == SDPMediaFormatsEnum.PCMU || x == SDPMediaFormatsEnum.PCMA || x == SDPMediaFormatsEnum.G722)))
             {
-                throw new ApplicationException("Only PCMA and PCMU are supported for audio codec options.");
+                throw new ApplicationException("Only PCMA, PCMU and G722 are supported for audio codec options.");
             }
 
             // Initialise the video decoding objects. Even if we are not sourcing video
@@ -252,6 +260,14 @@ namespace SIPSorcery.Media
                     }
                 }
                 audioCapabilities.Add(rtpEventFormat);
+
+                if (audioCapabilities.Any(x => x.FormatCodec == SDPMediaFormatsEnum.G722))
+                {
+                    _g722Encode = new G722Codec();
+                    _g722EncodeState = new G722CodecState(64000, G722Flags.None);
+                    _g722Decode = new G722Codec();
+                    _g722DecodeState = new G722CodecState(64000, G722Flags.None);
+                }
 
                 MediaStreamTrack audioTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.audio, false, audioCapabilities);
                 addTrack(audioTrack);
@@ -312,7 +328,8 @@ namespace SIPSorcery.Media
             }
             else
             {
-                SetAudioSource(audioOptions);
+                _sendingAudioFormat = base.GetSendingFormat(SDPMediaTypesEnum.audio);
+                SetAudioSource(audioOptions, _sendingAudioFormat);
                 _audioOpts = audioOptions;
                 StartAudio();
             }
@@ -346,13 +363,18 @@ namespace SIPSorcery.Media
         {
             if (!_isStarted)
             {
+                // The sending format needs to be known before initialising some audio 
+                // sources. For example the microphone sampling rate needs to be 8KHz 
+                // for G711 and 16KHz for G722.
+                _sendingAudioFormat = base.GetSendingFormat(SDPMediaTypesEnum.audio);
+
                 _isStarted = true;
 
                 await base.Start();
 
                 if (_audioOpts.AudioSource != AudioSourcesEnum.None)
                 {
-                    SetAudioSource(_audioOpts);
+                    SetAudioSource(_audioOpts, _sendingAudioFormat);
                     StartAudio();
                 }
 
@@ -419,14 +441,22 @@ namespace SIPSorcery.Media
         /// <summary>
         /// Initialise the audio capture and render device.
         /// </summary>
-        private void SetAudioSource(AudioOptions audioSourceOpts)
+        /// <param name="audioSourceOpts">The options that dictate the type of audio source to use.</param>
+        /// <param name="sendingFormat">The codec that will be sued to send the audio.</param>
+        private void SetAudioSource(AudioOptions audioSourceOpts, SDPMediaFormat sendingFormat)
         {
+            uint sampleRate = (uint)SDPMediaFormatInfo.GetClockRate(sendingFormat.FormatCodec);
+            uint rtpTimestamptRate = (uint)SDPMediaFormatInfo.GetRtpClockRate(sendingFormat.FormatCodec);
+            _rtpAudioTimestampPeriod = rtpTimestamptRate * AUDIO_SAMPLE_PERIOD_MILLISECONDS / 1000;
+
+            WaveFormat waveFormat = new WaveFormat((int)sampleRate, BITS_PER_SAMPLE, CHANNEL_COUNT);
+
             // Render device.
             if (_waveOutEvent == null)
             {
                 _waveOutEvent = new WaveOutEvent();
                 _waveOutEvent.DeviceNumber = (_audioOpts != null) ? _audioOpts.OutputDeviceIndex : AudioOptions.DEFAULT_OUTPUTDEVICE_INDEX;
-                _waveProvider = new BufferedWaveProvider(_waveFormat);
+                _waveProvider = new BufferedWaveProvider(waveFormat);
                 _waveProvider.DiscardOnBufferOverflow = true;
                 _waveOutEvent.Init(_waveProvider);
             }
@@ -440,9 +470,9 @@ namespace SIPSorcery.Media
                     {
                         _waveInEvent = new WaveInEvent();
                         _waveInEvent.BufferMilliseconds = AUDIO_SAMPLE_PERIOD_MILLISECONDS;
-                        _waveInEvent.NumberOfBuffers = AUDIO_INPUT_BUFFERS;
+                        _waveInEvent.NumberOfBuffers = INPUT_BUFFERS;
                         _waveInEvent.DeviceNumber = 0;
-                        _waveInEvent.WaveFormat = _waveFormat;
+                        _waveInEvent.WaveFormat = waveFormat;
                         _waveInEvent.DataAvailable += LocalAudioSampleAvailable;
                     }
                     else
@@ -450,11 +480,6 @@ namespace SIPSorcery.Media
                         Log.LogWarning("No audio capture devices are available. No audio stream will be sent.");
                     }
                 }
-            }
-
-            if (_rtpAudioTimestampPeriod == 0)
-            {
-                _rtpAudioTimestampPeriod = (uint)(SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.PCMU) / AUDIO_SAMPLE_PERIOD_MILLISECONDS);
             }
         }
 
@@ -464,8 +489,6 @@ namespace SIPSorcery.Media
         /// </summary>
         private void StartAudio()
         {
-            _sendingAudioFormat = base.GetSendingFormat(SDPMediaTypesEnum.audio);
-
             // Audio rendering (speaker).
             if (_waveOutEvent != null && _waveOutEvent.PlaybackState != PlaybackState.Playing)
             {
@@ -591,21 +614,41 @@ namespace SIPSorcery.Media
             byte[] sample = new byte[args.Buffer.Length / 2];
             int sampleIndex = 0;
 
-            for (int index = 0; index < args.BytesRecorded; index += 2)
+            if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMA || _sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMU)
             {
-                if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMU)
+                for (int index = 0; index < args.BytesRecorded; index += 2)
                 {
-                    var ulawByte = NAudio.Codecs.MuLawEncoder.LinearToMuLawSample(BitConverter.ToInt16(args.Buffer, index));
-                    sample[sampleIndex++] = ulawByte;
+                    if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMU)
+                    {
+                        var ulawByte = NAudio.Codecs.MuLawEncoder.LinearToMuLawSample(BitConverter.ToInt16(args.Buffer, index));
+                        sample[sampleIndex++] = ulawByte;
+                    }
+                    else if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMA)
+                    {
+                        var alawByte = NAudio.Codecs.ALawEncoder.LinearToALawSample(BitConverter.ToInt16(args.Buffer, index));
+                        sample[sampleIndex++] = alawByte;
+                    }
                 }
-                else if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.PCMA)
-                {
-                    var alawByte = NAudio.Codecs.ALawEncoder.LinearToALawSample(BitConverter.ToInt16(args.Buffer, index));
-                    sample[sampleIndex++] = alawByte;
-                }
-            }
 
-            base.SendAudioFrame((uint)sample.Length, Convert.ToInt32(_sendingAudioFormat.FormatID), sample);
+                base.SendAudioFrame(_rtpAudioTimestampPeriod, Convert.ToInt32(_sendingAudioFormat.FormatID), sample);
+            }
+            else if (_sendingAudioFormat.FormatCodec == SDPMediaFormatsEnum.G722)
+            {
+                // NAudio provides 16 Bit PCM little endian samples. Each sample consists of two bytes.
+                short[] inBuffer = new short[args.Buffer.Length / 2];
+                for (int index = 0; index < args.BytesRecorded; index += 2)
+                {
+                    inBuffer[sampleIndex++] = BitConverter.ToInt16(args.Buffer, index);
+                }
+
+                byte[] outBuffer = new byte[inBuffer.Length / 2];
+
+                int encodedSamples = _g722Encode.Encode(_g722EncodeState, outBuffer, inBuffer, inBuffer.Length);
+
+                //Log.LogDebug($"g722 encode input samples {args.Buffer.Length}, encoded samples {encodedSamples}, output buffer length {outBuffer.Length}.");
+
+                base.SendAudioFrame(_rtpAudioTimestampPeriod, Convert.ToInt32(_sendingAudioFormat.FormatID), outBuffer);
+            }
         }
 
         /// <summary>
@@ -694,29 +737,52 @@ namespace SIPSorcery.Media
             if (_waveProvider != null)
             {
                 var sample = rtpPacket.Payload;
-                Complex[] rawSamples = new Complex[sample.Length];
 
-                for (int index = 0; index < sample.Length; index++)
+                if (rtpPacket.Header.PayloadType == (int)SDPMediaFormatsEnum.PCMA ||
+                    rtpPacket.Header.PayloadType == (int)SDPMediaFormatsEnum.PCMU)
                 {
-                    short pcm = 0;
+                    Complex[] rawSamples = new Complex[sample.Length];
 
-                    if (rtpPacket.Header.PayloadType == (int)SDPMediaFormatsEnum.PCMA)
+                    for (int index = 0; index < sample.Length; index++)
                     {
-                        pcm = NAudio.Codecs.ALawDecoder.ALawToLinearSample(sample[index]);
-                        byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                        _waveProvider.AddSamples(pcmSample, 0, 2);
-                    }
-                    else
-                    {
-                        pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
-                        byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                        _waveProvider.AddSamples(pcmSample, 0, 2);
+                        short pcm = 0;
+
+                        if (rtpPacket.Header.PayloadType == (int)SDPMediaFormatsEnum.PCMA)
+                        {
+                            pcm = NAudio.Codecs.ALawDecoder.ALawToLinearSample(sample[index]);
+                            byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                            _waveProvider.AddSamples(pcmSample, 0, 2);
+                        }
+                        else if (rtpPacket.Header.PayloadType == (int)SDPMediaFormatsEnum.PCMU)
+                        {
+                            pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+                            byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                            _waveProvider.AddSamples(pcmSample, 0, 2);
+                        }
+
+                        rawSamples[index] = pcm / 32768f;
                     }
 
-                    rawSamples[index] = pcm / 32768f;
+                    OnAudioScopeSampleReady?.Invoke(rawSamples);
                 }
+                else if (rtpPacket.Header.PayloadType == (int)SDPMediaFormatsEnum.G722)
+                {
+                    short[] outBuffer = new short[sample.Length * 2]; // Decompressed PCM samples.
+                    int decodedSamples = _g722Decode.Decode(_g722DecodeState, outBuffer, sample, sample.Length);
 
-                OnAudioScopeSampleReady?.Invoke(rawSamples);
+                    //Log.LogDebug($"g722 decode input samples {sample.Length}, decoded samples {decodedSamples}.");
+
+                    for (int i = 0; i < decodedSamples; i++)
+                    {
+                        var pcm = outBuffer[i];
+                        byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                        _waveProvider.AddSamples(pcmSample, 0, 2);
+                    }
+                }
+                else
+                {
+                    Log.LogWarning("RTP packet received with unrecognised payload ID, ignoring.");
+                }
             }
         }
 
