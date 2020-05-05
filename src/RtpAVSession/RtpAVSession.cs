@@ -103,8 +103,6 @@ namespace SIPSorcery.Media
         public const string PCMA_AUDIO_SOURCE_FILE = "media/Macroform_-_Simplicity.alaw";
         public static string VIDEO_TESTPATTERN = "media/testpattern.jpeg";
         public static string VIDEO_ONHOLD_TESTPATTERN = "media/testpattern_inverted.jpeg";
-        public const int DTMF_EVENT_DURATION = 1200;        // Default duration for a DTMF event.
-        public const int DTMF_EVENT_PAYLOAD_ID = 101;
         private const int AUDIO_SAMPLE_PERIOD_MILLISECONDS = 20;
         private const int MAX_ENCODED_VIDEO_FRAME_SIZE = 65536;
 
@@ -387,22 +385,10 @@ namespace SIPSorcery.Media
         }
 
         /// <summary>
-        /// Sends a DTMF tone as an RTP event to the remote party.
-        /// </summary>
-        /// <param name="key">The DTMF tone to send.</param>
-        /// <param name="ct">RTP events can span multiple RTP packets. This token can
-        /// be used to cancel the send.</param>
-        public Task SendDtmf(byte key, CancellationToken ct)
-        {
-            var dtmfEvent = new RTPEvent(key, false, RTPEvent.DEFAULT_VOLUME, DTMF_EVENT_DURATION, DTMF_EVENT_PAYLOAD_ID);
-            return SendDtmfEvent(dtmfEvent, ct);
-        }
-
-        /// <summary>
         /// Closes the session.
         /// </summary>
         /// <param name="reason">Reason for the closure.</param>
-        public void Close(string reason)
+        public override void Close(string reason)
         {
             if (!_isClosed)
             {
@@ -434,7 +420,7 @@ namespace SIPSorcery.Media
                 _vpxEncoder?.Dispose();
                 _imgEncConverter?.Dispose();
 
-                base.CloseSession(reason);
+                base.Close(reason);
             }
         }
 
