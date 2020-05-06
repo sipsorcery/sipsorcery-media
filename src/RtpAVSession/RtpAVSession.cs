@@ -217,7 +217,7 @@ namespace SIPSorcery.Media
         /// and control sockets created. Generally this address does not need to be set. The default behaviour
         /// is to bind to [::] or 0.0.0.0,d depending on system support, which minimises network routing
         /// causing connection issues.</param>
-        public RtpAVSession(AudioOptions audioOptions, VideoOptions videoOptions, IPAddress bindAddress)
+        public RtpAVSession(AudioOptions audioOptions, VideoOptions videoOptions, IPAddress bindAddress = null)
             : base(false, false, false, bindAddress)
         {
             _audioOpts = audioOptions ?? DefaultAudioOptions;
