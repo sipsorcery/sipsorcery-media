@@ -204,7 +204,7 @@ namespace SIPSorcery.Media
         /// Uses default options for audio and video.
         /// </summary>
         public RtpAVSession() :
-           this(DefaultAudioOptions, DefaultVideoOptions)
+           this(DefaultAudioOptions, DefaultVideoOptions, null)
         { }
 
         /// <summary>
@@ -213,8 +213,12 @@ namespace SIPSorcery.Media
         /// <param name="addrFamily">The address family to create the underlying socket on (IPv4 or IPv6).</param>
         /// <param name="audioOptions">Options for the send and receive audio streams on this session.</param>
         /// <param name="videoOptions">Options for the send and receive video streams on this session</param>
-        public RtpAVSession(AudioOptions audioOptions, VideoOptions videoOptions)
-            : base(false, false, false)
+        /// <param name="bindAddress">Optional. If specified this address will be used as the bind address for any RTP
+        /// and control sockets created. Generally this address does not need to be set. The default behaviour
+        /// is to bind to [::] or 0.0.0.0,d depending on system support, which minimises network routing
+        /// causing connection issues.</param>
+        public RtpAVSession(AudioOptions audioOptions, VideoOptions videoOptions, IPAddress bindAddress)
+            : base(false, false, false, bindAddress)
         {
             _audioOpts = audioOptions ?? DefaultAudioOptions;
             _videoOpts = videoOptions ?? DefaultVideoOptions;

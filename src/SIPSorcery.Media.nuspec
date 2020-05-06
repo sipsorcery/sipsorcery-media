@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>4.0.45-pre</version>
+    <version>4.0.46-pre</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -11,7 +11,8 @@
     <projectUrl>https://github.com/sipsorcery/sipsorcery-media</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
     <description>The SIPSorcery package for WebRTC plumbing and Windows audio and video capture.</description>
-	<releaseNotes>- v4.0.45-pre: Updated for change to RTPSession interface.
+	<releaseNotes>- v4.0.46-pre: Added optional bindAddress parameter to RtpAVSession constructor for RTP sockets.
+- v4.0.45-pre: Updated for change to RTPSession interface.
 - v4.0.44-pre: Added G722 support to RtpAvSession.
 - v4.0.43-pre: Increased NAudio input buffers from 1 to 2.
 - v4.0.42-pre: Adjusted order to codecs in SDP to place RTP event format last.
@@ -36,7 +37,7 @@
 	    <dependency id="MathNet.Filtering" version="0.6.0" />
 		<dependency id="MathNet.Numerics" version="4.9.0" />
 		<dependency id="NAudio" version="1.10.0" />
-		<dependency id="SIPSorcery" version="4.0.45-pre" />
+		<dependency id="SIPSorcery" version="4.0.46-pre" />
 		<dependency id="System.Drawing.Common" version="4.7.0" />
 		<dependency id="System.Drawing.Primitives" version="4.3.0" />
 	</dependencies>
