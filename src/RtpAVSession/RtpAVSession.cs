@@ -15,14 +15,11 @@
 //-----------------------------------------------------------------------------
 
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,14 +33,6 @@ using SIPSorceryMedia;
 
 namespace SIPSorcery.Media
 {
-    public enum AudioSourcesEnum
-    {
-        None = 0,
-        Microphone = 1,
-        Music = 2,
-        Silence = 3
-    }
-
     public class AudioOptions
     {
         /// <summary>
@@ -121,7 +110,7 @@ namespace SIPSorcery.Media
 
         private static Microsoft.Extensions.Logging.ILogger Log = SIPSorcery.Sys.Log.Logger;
 
-        public static AudioOptions DefaultAudioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.Microphone };
+        public static AudioOptions DefaultAudioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.CaptureDevice };
         public static VideoOptions DefaultVideoOptions = new VideoOptions { VideoSource = VideoSourcesEnum.None };
 
         private AudioOptions _audioOpts;
@@ -215,7 +204,7 @@ namespace SIPSorcery.Media
         /// <param name="videoOptions">Options for the send and receive video streams on this session</param>
         /// <param name="bindAddress">Optional. If specified this address will be used as the bind address for any RTP
         /// and control sockets created. Generally this address does not need to be set. The default behaviour
-        /// is to bind to [::] or 0.0.0.0,d depending on system support, which minimises network routing
+        /// is to bind to [::] or 0.0.0.0, depending on system support, which minimises network routing
         /// causing connection issues.</param>
         public RtpAVSession(AudioOptions audioOptions, VideoOptions videoOptions, IPAddress bindAddress = null)
             : base(false, false, false, bindAddress)
@@ -452,7 +441,7 @@ namespace SIPSorcery.Media
             }
 
             // Audio source.
-            if (audioSourceOpts.AudioSource == AudioSourcesEnum.Microphone)
+            if (audioSourceOpts.AudioSource == AudioSourcesEnum.CaptureDevice)
             {
                 if (_waveInEvent == null)
                 {
@@ -490,7 +479,7 @@ namespace SIPSorcery.Media
             {
                 _waveInEvent?.StopRecording();
 
-                if (_audioOpts.AudioSource == AudioSourcesEnum.Microphone)
+                if (_audioOpts.AudioSource == AudioSourcesEnum.CaptureDevice)
                 {
                     // Don't need the stream or silence sampling.
                     if (_audioStreamTimer != null)
