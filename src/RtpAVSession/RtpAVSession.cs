@@ -260,13 +260,13 @@ namespace SIPSorcery.Media
                     _g722DecodeState = new G722CodecState(64000, G722Flags.None);
                 }
 
-                MediaStreamTrack audioTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.audio, false, audioCapabilities);
+                MediaStreamTrack audioTrack = new MediaStreamTrack(SDPMediaTypesEnum.audio, false, audioCapabilities);
                 addTrack(audioTrack);
             }
 
             if (_videoOpts.VideoSource != VideoSourcesEnum.None)
             {
-                MediaStreamTrack videoTrack = new MediaStreamTrack(null, SDPMediaTypesEnum.video, false, new List<SDPMediaFormat> { new SDPMediaFormat(SDPMediaFormatsEnum.VP8) });
+                MediaStreamTrack videoTrack = new MediaStreamTrack(SDPMediaTypesEnum.video, false, new List<SDPMediaFormat> { new SDPMediaFormat(SDPMediaFormatsEnum.VP8) });
                 addTrack(videoTrack);
             }
 

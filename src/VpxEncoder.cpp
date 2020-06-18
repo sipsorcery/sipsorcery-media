@@ -34,6 +34,8 @@ namespace SIPSorceryMedia {
 
 	// Setting config parameters in Chromium source.
 	// https://chromium.googlesource.com/external/webrtc/stable/src/+/b8671cb0516ec9f6c7fe22a6bbe331d5b091cdbb/modules/video_coding/codecs/vp8/vp8.cc
+	// Updated link 15 Jun 2020.
+	// https://chromium.googlesource.com/external/webrtc/stable/src/+/refs/heads/master/modules/video_coding/codecs/vp8/vp8_impl.cc
 	int VpxEncoder::InitEncoder(unsigned int width, unsigned int height, unsigned int stride)
 	{
 		_vpxCodec = new vpx_codec_ctx_t();

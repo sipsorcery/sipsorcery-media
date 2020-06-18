@@ -34,7 +34,7 @@
 // wire the two BIO's together and pass the handshake data to and from the UDP
 // socket (which was only accessible on the C# side).
 //
-// Memory BIO's also resulted in Microsoft's Edge browser note being able to complete
+// Memory BIO's also resulted in Microsoft's Edge browser not being able to complete
 // the handshake because of a seeming incompatibility with packet fragmentation.
 // The memory BIO typically concatenated multiple transmissions for the client 
 // into a single output and when that was communicated to Edge it doesn't seem
@@ -43,7 +43,7 @@
 // The alternative to a memory BIO is to use a datagram BIO (BIO_new_dgram) and 
 // pass the socket handle from C# directly to this class. The OpenSSL functions
 // are able to recognised DTLS packets and process the handshake while leaving
-// any other packets (STUN,RTP, RTCP etc.) alone or the application to handle.
+// any other packets (STUN, RTP, RTCP etc.) alone for the application to handle.
 // This is a much nicer approach. Instead of having to do the C++/.Net interop 
 // to pass buffers backwards and forwards a single socket handle is all that gets
 // passed.
@@ -66,6 +66,7 @@
 #include <openssl/err.h>
 #include <openssl/srtp.h>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
 #include <msclr/marshal.h>
 #include <msclr/marshal_cppstd.h>
 
@@ -150,19 +151,41 @@ namespace SIPSorceryMedia {
     * @param[in] socket: handle to the socket to perform the DTLS handshake on. Note
     *  the SSL context is configured in "accept" mode which means our end is acting
     *  as the server. The remote socket will need to initiate the DTLS handshake.
+    * @param[out] fingerprint: if the handshake completes successfully then the
+    *  fingerprint (sha2556 hash of the X509 certificate) of the client's X509 
+    *  certificate will be set. It's up to the calling application to verify the 
+    *  fingerprint matches what was expected.
     * @@Returns: 0 if the handshake completed successfully or -1 if there was an error.
     */
-    int DoHandshakeAsServer(SOCKET socket);
+    int DoHandshakeAsServer(SOCKET socket, /* out */ array<Byte>^% fingerprint);
 
     /**
     * Performs the DTLS handshake as the client. It will initiate the handshake to
     * the DTLS server.
+    * WARNING: The approach of sharing the socket handle is not reliable. If
+    * another thread is also calling receive on the socket then this method will 
+    * usually fail because it does not get one or more packets involved in the 
+    * handshake. Ideally any other thread using the socket should pause until the 
+    * handshake completes.
     * @param[in] socket: handle to the socket to perform the DTLS handshake on. 
     *  IMPORTANT: the socket must have had connect called to set the remote destination
     *  end point.
+    * @param[in] svrAddrFamily: whether the remote server to perform the handshake
+    *  with is IPv4 or IPv6.
+    * @param[in] addrByte: IP address of the remote server.
+    * @param[in] svrPort: port for the remote server.
+    * @param[out] fingerprint: if the handshake completes successfully then the
+    *  fingerprint (sha2556 hash of the X509 certificate) of the servers' X509 
+    *  certificate will be set. It's up to the calling application to verify the 
+    *  fingerprint matches what was expected.
     * @@Returns: 0 if the handshake completed successfully or -1 if there was an error.
     */
-    int DoHandshakeAsClient(SOCKET socket, short svrAddrFamily, array<Byte>^ addrBytes, u_short svrPort);
+    int DoHandshakeAsClient(
+      SOCKET socket, 
+      short svrAddrFamily, 
+      array<Byte>^ addrBytes,
+      u_short svrPort, 
+      /* out */ array<Byte>^% fingerprint);
 
     /**
     * Checks whether the DTLS handshake has been completed.

@@ -68,7 +68,7 @@ namespace SIPSorceryMedia {
   /*
   * Performs the server side of a DTLS handshake.
   */
-  int DtlsHandshake::DoHandshakeAsServer(SOCKET rtpSocket)
+  int DtlsHandshake::DoHandshakeAsServer(SOCKET rtpSocket, /* out */ array<Byte>^% fingerprint)
   {
     // Dump any openssl errors.
     ERR_print_errors_fp(stderr);
@@ -133,8 +133,11 @@ namespace SIPSorceryMedia {
     //SSL_CTX_set_cookie_generate_cb(_k->ctx, generate_cookie);
     //SSL_CTX_set_cookie_verify_cb(_k->ctx, verify_cookie);
     SSL_CTX_set_ecdh_auto(_k->ctx, 1);                        // Needed for FireFox DTLS negotiation.
-    SSL_CTX_set_verify(_k->ctx, SSL_VERIFY_NONE, nullptr);    // The client doesn't have to send it's certificate.
-    //SSL_CTX_set_verify(_k->ctx, SSL_VERIFY_PEER, krx_ssl_verify_peer);
+
+    // The client's certificate doesn't need to be verified but it
+    // does need to be supplied so the fingerprint can be passed
+    // to the caller.
+    SSL_CTX_set_verify(_k->ctx, SSL_VERIFY_PEER, krx_ssl_verify_peer);
 
     /* create SSL* */
     _k->ssl = SSL_new(_k->ctx);
@@ -175,29 +178,52 @@ namespace SIPSorceryMedia {
       printf("DTLS server handshake completed.\n");
     }
 
+    X509 * peerCert = SSL_get_peer_certificate(_k->ssl);
+    if (peerCert != NULL) {
+
+      const EVP_MD* digest = EVP_get_digestbyname("sha256");
+      unsigned char fp[EVP_MAX_MD_SIZE];
+      unsigned int length = 0;
+      if (X509_digest(peerCert, digest, fp, &length) == 1) {
+        // Set the fingerprint of the X509 certificate provided by the
+        // client so the calling application can check.
+        fingerprint = gcnew array<Byte>(length);
+        Marshal::Copy((IntPtr)fp, fingerprint, 0, length);
+      }
+      else {
+        printf("Failed to get fingerprint for peer certificate.\n");
+      }
+
+      X509_free(peerCert);
+    }
+
     // Dump any openssl errors.
     ERR_print_errors_fp(stderr);
 
     return 0;
   }
- 
+
   /*
   * Performs the client side of a DTLS handshake.
   */
-  int DtlsHandshake::DoHandshakeAsClient(SOCKET rtpSocket, short svrAddrFamily, array<Byte>^ addrBytes, u_short svrPort)
+  int DtlsHandshake::DoHandshakeAsClient(
+    SOCKET rtpSocket, 
+    short svrAddrFamily, 
+    array<Byte>^ addrBytes, 
+    u_short svrPort,
+    /* out */ array<Byte>^% fingerprint)
   {
     // Dump any openssl errors.
     ERR_print_errors_fp(stderr);
 
     int r = 0;
-    sockaddr * pSvrAddr = nullptr;
+    sockaddr* pSvrAddr = nullptr;
     int svrAddrSize = 0;
     sockaddr_in svrAddr4 = { 0 };
     sockaddr_in6 svrAddr6 = { 0 };
 
     if (svrAddrFamily == AF_INET6) {
       svrAddr6.sin6_family = AF_INET6;
-      //svrAddr6.sin6_addr = in6addr_loopback;
       memcpy_s((void*)&svrAddr6.sin6_addr, sizeof(in6_addr), &addrBytes, addrBytes->Length);
       svrAddr6.sin6_port = htons(svrPort);
 
@@ -207,7 +233,6 @@ namespace SIPSorceryMedia {
     else {
       svrAddr4.sin_family = AF_INET;
       memcpy_s((void*)&svrAddr4.sin_addr, sizeof(in_addr), &addrBytes, addrBytes->Length);
-      //svrAddr4.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
       svrAddr4.sin_port = htons(svrPort);
 
       pSvrAddr = (sockaddr*)&svrAddr4;
@@ -238,8 +263,40 @@ namespace SIPSorceryMedia {
       return HANDSHAKE_ERROR_STATUS;
     }
 
+    std::string certFilePath = msclr::interop::marshal_as<std::string>(_certFile);
+
+    /* certificate file; contains also the public key */
+    r = SSL_CTX_use_certificate_file(_k->ctx, certFilePath.c_str(), SSL_FILETYPE_PEM);
+    if (r != 1) {
+      printf("Error: cannot load certificate file.\n");
+      ERR_print_errors_fp(stderr);
+      return HANDSHAKE_ERROR_STATUS;
+    }
+
+    std::string keyFilePath = msclr::interop::marshal_as<std::string>(_keyFile);
+
+    /* load private key */
+    r = SSL_CTX_use_PrivateKey_file(_k->ctx, keyFilePath.c_str(), SSL_FILETYPE_PEM);
+    if (r != 1) {
+      printf("Error: cannot load private key file.\n");
+      ERR_print_errors_fp(stderr);
+      return HANDSHAKE_ERROR_STATUS;
+    }
+
+    /* check if the private key is valid */
+    r = SSL_CTX_check_private_key(_k->ctx);
+    if (r != 1) {
+      printf("Error: checking the private key failed. \n");
+      ERR_print_errors_fp(stderr);
+      return HANDSHAKE_ERROR_STATUS;
+    }
+
     SSL_CTX_set_ecdh_auto(_k->ctx, 1);                        // Needed for FireFox DTLS negotiation.
-    SSL_CTX_set_verify(_k->ctx, SSL_VERIFY_NONE, nullptr);    // The client doesn't have to send it's certificate.
+
+    // The server's certificate doesn't need to be verified but it
+    // does need to be supplied so the fingerprint can be passed
+    // to the caller.
+    SSL_CTX_set_verify(_k->ctx, SSL_VERIFY_PEER, krx_ssl_verify_peer);
 
     /* create SSL* */
     _k->ssl = SSL_new(_k->ctx);
@@ -267,14 +324,33 @@ namespace SIPSorceryMedia {
       printf("Error: BIO_CTL to set BIO_CTRL_DGRAM_SET_CONNECTED failed.\n");
     }
 
-    // Attempt to complete the DTLS handshake
-    // If successful, the DTLS link state is initialized internally
     if (SSL_connect(_k->ssl) <= 0) {
-      printf("Failed to complete SSL handshake.\n");
+      // Did another thread read our DTLS packets?! Make sure there are no
+      // other active socket receivers.
+      printf("Failed to complete SSL client connection handshake.\n");
       return HANDSHAKE_ERROR_STATUS;
     }
     else {
       printf("DTLS client handshake completed.\n");
+    }
+
+    X509* peerCert = SSL_get_peer_certificate(_k->ssl);
+    if (peerCert != NULL) {
+
+      const EVP_MD* digest = EVP_get_digestbyname("sha256");
+      unsigned char fp[EVP_MAX_MD_SIZE];
+      unsigned int length = 0;
+      if (X509_digest(peerCert, digest, fp, &length) == 1) {
+        // Set the fingerprint of the X509 certificate provided by the
+        // client so the calling application can check.
+        fingerprint = gcnew array<Byte>(length);
+        Marshal::Copy((IntPtr)fp, fingerprint, 0, length);
+      }
+      else {
+        printf("Failed to get fingerprint for peer certificate.\n");
+      }
+
+      X509_free(peerCert);
     }
 
     // Dump any openssl errors.

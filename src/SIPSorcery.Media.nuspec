@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>4.0.50-pre</version>
+    <version>4.0.53-pre</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -11,7 +11,9 @@
     <projectUrl>https://github.com/sipsorcery/sipsorcery-media</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
     <description>The SIPSorcery package for WebRTC plumbing and Windows audio and video capture.</description>
-	<releaseNotes>- v4.0.47-pre: Changed audio source enum,
+	<releaseNotes>- v4.0.53-pre: Updated for changes to add track to RTPSession method.
+- v4.0.52-pre: Updated for changes to SIPSorcery library.
+- v4.0.47-pre: Changed audio source enum.
 - v4.0.47-pre: Make bindAddress parameter to RtpAVSession optional.
 - v4.0.46-pre: Added optional bindAddress parameter to RtpAVSession constructor for RTP sockets.
 - v4.0.45-pre: Updated for change to RTPSession interface.
@@ -32,14 +34,14 @@
 - v3.0.0: Tweaked nuget package to remove build warnings due to mismatched platform reference.
 </releaseNotes>
     <copyright>Copyright (c) 2019-2020 Aaron Clauson</copyright>
-    <language>en-US</language>
+    <language>en-AU</language>
     <tags>WebRTC MediaFoundation DTLS SRTP</tags>
 	<repository type="git" url="https://github.com/sipsorcery/sipsorcery-media" branch="master" />
 	<dependencies>
 	    <dependency id="MathNet.Filtering" version="0.6.0" />
 		<dependency id="MathNet.Numerics" version="4.9.0" />
 		<dependency id="NAudio" version="1.10.0" />
-		<dependency id="SIPSorcery" version="4.0.50-pre" />
+		<dependency id="SIPSorcery" version="4.0.53-pre" />
 		<dependency id="System.Drawing.Common" version="4.7.0" />
 		<dependency id="System.Drawing.Primitives" version="4.3.0" />
 	</dependencies>
