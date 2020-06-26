@@ -175,7 +175,7 @@ namespace SIPSorceryMedia {
     * @param[in] addrByte: IP address of the remote server.
     * @param[in] svrPort: port for the remote server.
     * @param[out] fingerprint: if the handshake completes successfully then the
-    *  fingerprint (sha2556 hash of the X509 certificate) of the servers' X509 
+    *  fingerprint (sha2556 hash of the X509 certificate) of the server's X509 
     *  certificate will be set. It's up to the calling application to verify the 
     *  fingerprint matches what was expected.
     * @@Returns: 0 if the handshake completed successfully or -1 if there was an error.
