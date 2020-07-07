@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>4.0.55-pre</version>
+    <version>4.0.58-pre</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -11,7 +11,8 @@
     <projectUrl>https://github.com/sipsorcery/sipsorcery-media</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
     <description>The SIPSorcery package for WebRTC plumbing and Windows audio and video capture.</description>
-	<releaseNotes>- v4.0.55-pre: Added support for RtpIceChannel.
+	<releaseNotes>- v4.0.58-pre: Synchronised with SIPSorcery release.
+- v4.0.55-pre: Added support for RtpIceChannel.
 - v4.0.53-pre: Updated for changes to add track to RTPSession method.
 - v4.0.52-pre: Updated for changes to SIPSorcery library.
 - v4.0.47-pre: Changed audio source enum.
@@ -42,7 +43,7 @@
 	    <dependency id="MathNet.Filtering" version="0.6.0" />
 		<dependency id="MathNet.Numerics" version="4.9.0" />
 		<dependency id="NAudio" version="1.10.0" />
-		<dependency id="SIPSorcery" version="4.0.55-pre" />
+		<dependency id="SIPSorcery" version="4.0.58-pre" />
 		<dependency id="System.Drawing.Common" version="4.7.0" />
 		<dependency id="System.Drawing.Primitives" version="4.3.0" />
 	</dependencies>
