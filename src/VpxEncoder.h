@@ -28,82 +28,157 @@ using namespace System::Runtime::InteropServices;
 
 namespace SIPSorceryMedia {
 
-	public ref class VpxEncoder
-	{
-		public:
+  public ref class VpxEncoder
+  {
+  public:
 
-			/**
-			* Default constructor.
-			*/
-			VpxEncoder();
+    /**
+    * Default constructor.
+    */
+    VpxEncoder();
 
-			/**
-			* Default destructor.
-			*/
-			~VpxEncoder();
+    /**
+    * Default destructor.
+    */
+    ~VpxEncoder();
 
-			/**
-			* Initialises the VP8 encoder.
-			* @param[in] width: the width of the I420 image that will be encoded.
-			* @param[in] height: the height of the I420 image that will be encoded.
-			* @param[in] stride: the stride (alignment) of the I420 image that will be encoded.
-			* @@Returns: 0 if successful or -1 if not.
-			*/
-			int InitEncoder(unsigned int width, unsigned int height, unsigned int stride);
-			
-			/**
-			* Initialises the VP8 decoder.
-			* @@Returns: 0 if successful or -1 if not.
-			*/
-			int InitDecoder();
-			
-			/**
-			* Attempts to encode an I420 frame as VP8.
-			* @param[in] i420: pointer to the buffer with the i420 frame to encode.
-			* @param[in] i420Length: the length of the i420 buffer.
-			* @param[in] sampleCount: an integer which when multiplied by the stream's timebase gives the 
-			* presentation time of the sample.
-			* @param[out] buffer: a buffer holding the VP8 encoded sample.
-			* @@Returns: 0 if successful or -1 if not.
-			*/
-			int Encode(unsigned char * i420, int i420Length, int sampleCount, array<Byte> ^% buffer);
-			
-			/**
-			* Attempts to decode an VP8 frame to an I420 image.
-			* @param[in] buffer: pointer to the VP8 encoded frame to decode.
-			* @param[in] bufferSize: the length of the VP8 encoded frame.
-			* @param[out] outBuffer: a buffer holding the decoded I420 image. This buffer will be allocated
-			*  and should be null.
-			* @param[out] width: the width of the decoded I420 image.
-			* @param[out] height: the height of the decoded I420 image.
-			* @@Returns: 0 if successful or -1 if not.
-			*/
-			int Decode(unsigned char* buffer, int bufferSize, array<Byte> ^% outBuffer, unsigned int % width, unsigned int % height);
+    /**
+    * Initialises the VP8 encoder.
+    * @param[in] width: the width of the I420 image that will be encoded.
+    * @param[in] height: the height of the I420 image that will be encoded.
+    * @param[in] stride: the stride (alignment) of the I420 image that will be encoded.
+    * @@Returns: 0 if successful or -1 if not.
+    */
+    int InitEncoder(unsigned int width, unsigned int height, unsigned int stride);
 
-			/**
-			* Returns the current width of the VP8 encoder.
-			* @@Returns: the current width of the VP8 encoder.
-			*/
-      int GetWidth() { return _width; }
+    /**
+    * Initialises the VP8 decoder.
+    * @@Returns: 0 if successful or -1 if not.
+    */
+    int InitDecoder();
 
-			/**
-			* Returns the current height of the VP8 encoder.
-			* @@Returns: the current height of the VP8 encoder.
-			*/
-      int GetHeight() { return _height; }
+    /**
+    * Attempts to encode an I420 frame as VP8.
+    * @param[in] i420: pointer to the buffer with the i420 frame to encode.
+    * @param[in] i420Length: the length of the i420 buffer.
+    * @param[in] sampleCount: an integer which when multiplied by the stream's timebase gives the
+    * presentation time of the sample.
+    * @param[out] buffer: a buffer holding the VP8 encoded sample.
+    * @@Returns: 0 if successful or -1 if not.
+    */
+    int Encode(unsigned char* i420, int i420Length, int sampleCount, array<Byte>^% buffer);
 
-			/**
-			* Returns the current stride/alignment of the VP8 encoder.
-			* @@Returns: the current width/alignment of the VP8 encoder.
-			*/
-      int GetStride() { return _stride; }
+    /**
+    * Attempts to decode an VP8 frame to an I420 image.
+    * @param[in] buffer: pointer to the VP8 encoded frame to decode.
+    * @param[in] bufferSize: the length of the VP8 encoded frame.
+    * @param[out] outBuffer: a buffer holding the decoded I420 image. This buffer will be allocated
+    *  and should be null.
+    * @param[out] width: the width of the decoded I420 image.
+    * @param[out] height: the height of the decoded I420 image.
+    * @@Returns: 0 if successful or -1 if not.
+    */
+    int Decode(unsigned char* buffer, int bufferSize, array<Byte>^% outBuffer, unsigned int% width, unsigned int% height);
 
-		private:
+    /**
+    * Returns the current width of the VP8 encoder.
+    * @@Returns: the current width of the VP8 encoder.
+    */
+    int GetWidth() { return _width; }
 
-			vpx_codec_ctx_t * _vpxCodec;
-			vpx_codec_ctx_t * _vpxDecoder;
-			vpx_image_t * _rawImage;
-			int _width = 0, _height = 0, _stride = 0;
-	};
+    /**
+    * Returns the current height of the VP8 encoder.
+    * @@Returns: the current height of the VP8 encoder.
+    */
+    int GetHeight() { return _height; }
+
+    /**
+    * Returns the current stride/alignment of the VP8 encoder.
+    * @@Returns: the current width/alignment of the VP8 encoder.
+    */
+    int GetStride() { return _stride; }
+
+    /*
+     * quantizer settings
+     */
+
+     /*!\brief Minimum (Best Quality) Quantizer
+      *
+      * The quantizer is the most direct control over the quality of the
+      * encoded image. The range of valid values for the quantizer is codec
+      * specific. Choose a value between 10 and 100. Default 50.
+      */
+
+    property unsigned int MinQuantizer {
+      unsigned int get() {
+        return _rc_min_quantizer;
+      }
+
+      void set(unsigned int value) {
+        _rc_min_quantizer = value;
+      }
+    }
+
+    /*!\brief Maximum (Worst Quality) Quantizer
+      *
+      * The quantizer is the most direct control over the quality of the
+      * encoded image. The range of valid values for the quantizer is codec
+      * specific. Choose a value between 10 and 100. Default 60.
+      */
+    property unsigned int MaxQuantizer {
+      unsigned int get() {
+        return _rc_max_quantizer;
+      }
+
+      void set(unsigned int value) {
+        _rc_max_quantizer = value;
+      }
+    }
+
+    /*!\brief Target data rate
+      *
+      * Target bandwidth to use for this stream, in kilobits per second. Default 300.
+      */
+    property unsigned int BitRate {
+      unsigned int get() {
+        return _rc_target_bitrate;
+      }
+
+      void set(unsigned int value) {
+        _rc_target_bitrate = value;
+      }
+    }
+
+
+
+    /// <summary>
+    /// Use Constant Bit Rate (CBR) mode
+    /// If false, uses Variable Bit Rate(VBR) mode
+    /// </summary>
+    property bool CbrEncodingMode {
+      bool get() {
+        return _rc_is_cbr;
+      }
+
+      void set(bool value) {
+        _rc_is_cbr = value;
+      }
+
+    }
+
+
+  private:
+
+    vpx_codec_ctx_t* _vpxCodec;
+    vpx_codec_ctx_t* _vpxDecoder;
+    vpx_image_t* _rawImage;
+    int _width = 0, _height = 0, _stride = 0;
+
+    unsigned int _rc_target_bitrate = 300;
+
+    unsigned int _rc_min_quantizer = 50;// 20; // 50;
+    unsigned int _rc_max_quantizer = 60;//  30; // 60;
+    bool _rc_is_cbr;
+  };
 }
 

@@ -153,7 +153,7 @@ namespace SIPSorceryMedia {
 	private:
 
 		static BOOL _isInitialised = false;
-		const int MAX_STREAM_INDEX = 10;
+		const unsigned int MAX_STREAM_INDEX = 10;
 		const int TIMESTAMP_MILLISECOND_DIVISOR = 10000;	// Media sample timestamps are given in 100's of nano seconds.
 
 		IMFSourceReader * _sourceReader = NULL;
