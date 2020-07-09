@@ -61,11 +61,18 @@ namespace SIPSorceryMedia {
 
 			vpxConfig.g_w = width;
 			vpxConfig.g_h = height;
-			vpxConfig.rc_target_bitrate = 300; // 5000; // in kbps.
-			vpxConfig.rc_min_quantizer = 20; // 50;
-			vpxConfig.rc_max_quantizer = 30; // 60;
+			vpxConfig.rc_target_bitrate = _rc_target_bitrate;//  300; // 5000; // in kbps.
+			vpxConfig.rc_min_quantizer = _rc_min_quantizer;// 20; // 50;
+			vpxConfig.rc_max_quantizer = _rc_max_quantizer;// 30; // 60;
 			vpxConfig.g_pass = VPX_RC_ONE_PASS;
-			vpxConfig.rc_end_usage = VPX_CBR;
+			if (_rc_is_cbr) {
+				vpxConfig.rc_end_usage = VPX_CBR;
+			}
+			else
+			{ 
+				vpxConfig.rc_end_usage = VPX_VBR;
+			}
+		  
 			vpxConfig.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
 			vpxConfig.g_lag_in_frames = 0;
 			vpxConfig.rc_resize_allowed = 0;
