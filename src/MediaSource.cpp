@@ -512,7 +512,7 @@ namespace SIPSorceryMedia {
       // Enumerate the devices,
       CHECKHR_THROW(MFEnumDeviceSources(videoConfig, &videoDevices, &videoDeviceCount), "Error enumerating video devices.");
 
-      for (int index = 0; index < videoDeviceCount; index++)
+      for (unsigned int index = 0; index < videoDeviceCount; index++)
       {
         WCHAR* deviceFriendlyName;
 
