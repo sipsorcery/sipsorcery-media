@@ -35,7 +35,7 @@ Install-Package SIPSorceryMedia -pre
 ````
 
 ````
-dotnet add package SIPSorceryMedia --version "4.0.28-pre"
+dotnet add package SIPSorceryMedia --version "4.0.58-pre"
 ````
 
 ## Getting Started
