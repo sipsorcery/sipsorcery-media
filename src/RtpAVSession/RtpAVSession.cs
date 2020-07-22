@@ -693,7 +693,7 @@ namespace SIPSorcery.Media
         /// </summary>
         /// <param name="mediaType">The media type of the packets.</param>
         /// <param name="rtpPacket">The RTP packet with the media sample.</param>
-        private void RtpPacketReceived(SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
+        private void RtpPacketReceived(IPEndPoint remoteEP, SDPMediaTypesEnum mediaType, RTPPacket rtpPacket)
         {
             //Log.LogDebug($"RTP packet received for {mediaType}.");
 
