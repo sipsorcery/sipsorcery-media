@@ -110,11 +110,12 @@ namespace SIPSorcery.Media
 
         private static Microsoft.Extensions.Logging.ILogger Log = SIPSorcery.Sys.Log.Logger;
 
-        public static AudioOptions DefaultAudioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.CaptureDevice };
+        public static AudioOptions DefaultAudioOptions = new AudioOptions { AudioSource = AudioSourcesEnum.None };
         public static VideoOptions DefaultVideoOptions = new VideoOptions { VideoSource = VideoSourcesEnum.None };
 
         private AudioOptions _audioOpts;
         private VideoOptions _videoOpts;
+        private bool _disableExternalAudioSource;
 
         /// <summary>
         /// Audio render device.
@@ -206,11 +207,14 @@ namespace SIPSorcery.Media
         /// and control sockets created. Generally this address does not need to be set. The default behaviour
         /// is to bind to [::] or 0.0.0.0, depending on system support, which minimises network routing
         /// causing connection issues.</param>
-        public RtpAVSession(AudioOptions audioOptions, VideoOptions videoOptions, IPAddress bindAddress = null)
+        /// <param name="disableExternalAudioSource">If true then no attempt will be made to use an external audio
+        /// source, e.g. microphone.</param>
+        public RtpAVSession(AudioOptions audioOptions, VideoOptions videoOptions, IPAddress bindAddress = null, bool disableExternalAudioSource = false)
             : base(false, false, false, bindAddress)
         {
             _audioOpts = audioOptions ?? DefaultAudioOptions;
             _videoOpts = videoOptions ?? DefaultVideoOptions;
+            _disableExternalAudioSource = disableExternalAudioSource;
 
             if (_audioOpts != null && _audioOpts.AudioCodecs != null &&
                 _audioOpts.AudioCodecs.Any(x => !(x == SDPMediaFormatsEnum.PCMU || x == SDPMediaFormatsEnum.PCMA || x == SDPMediaFormatsEnum.G722)))
@@ -232,11 +236,11 @@ namespace SIPSorcery.Media
             {
                 var pcmu = new SDPMediaFormat(SDPMediaFormatsEnum.PCMU);
 
-                // RTP event support.
-                int clockRate = pcmu.GetClockRate();
-                SDPMediaFormat rtpEventFormat = new SDPMediaFormat(DTMF_EVENT_PAYLOAD_ID);
-                rtpEventFormat.SetFormatAttribute($"{SDP.TELEPHONE_EVENT_ATTRIBUTE}/{clockRate}");
-                rtpEventFormat.SetFormatParameterAttribute("0-16");
+                //// RTP event support.
+                //int clockRate = pcmu.GetClockRate();
+                //SDPMediaFormat rtpEventFormat = new SDPMediaFormat(DTMF_EVENT_PAYLOAD_ID);
+                //rtpEventFormat.SetFormatAttribute($"{SDP.TELEPHONE_EVENT_ATTRIBUTE}/{clockRate}");
+                //rtpEventFormat.SetFormatParameterAttribute("0-16");
 
                 var audioCapabilities = new List<SDPMediaFormat>();
                 if (_audioOpts.AudioCodecs == null || _audioOpts.AudioCodecs.Count == 0)
@@ -250,7 +254,7 @@ namespace SIPSorcery.Media
                         audioCapabilities.Add(new SDPMediaFormat(codec));
                     }
                 }
-                audioCapabilities.Add(rtpEventFormat);
+                //audioCapabilities.Add(rtpEventFormat);
 
                 if (audioCapabilities.Any(x => x.FormatCodec == SDPMediaFormatsEnum.G722))
                 {
@@ -281,8 +285,12 @@ namespace SIPSorcery.Media
         /// Set to null to leave the audio source unchanged.</param>
         /// <param name="videoOptions">Optional. If video is being switched the new source options.
         /// Set to null to leave the video source unchanged.</param>
-        public async Task SetSources(AudioOptions audioOptions, VideoOptions videoOptions)
+        /// <param name="disableExternalAudioSource">If true then no attempt will be made to use an external audio
+        /// source, e.g. microphone.</param>
+        public async Task SetSources(AudioOptions audioOptions, VideoOptions videoOptions, bool disableExternalAudioSource = false)
         {
+            _disableExternalAudioSource = disableExternalAudioSource;
+
             // Check whether the underlying media session has changed which dictates whether
             // an audio or video source needs to be removed.
             if (!HasAudio)
@@ -441,7 +449,7 @@ namespace SIPSorcery.Media
             }
 
             // Audio source.
-            if (audioSourceOpts.AudioSource == AudioSourcesEnum.CaptureDevice)
+            if (!_disableExternalAudioSource)
             {
                 if (_waveInEvent == null)
                 {
@@ -479,7 +487,7 @@ namespace SIPSorcery.Media
             {
                 _waveInEvent?.StopRecording();
 
-                if (_audioOpts.AudioSource == AudioSourcesEnum.CaptureDevice)
+                if (!_disableExternalAudioSource)
                 {
                     // Don't need the stream or silence sampling.
                     if (_audioStreamTimer != null)
@@ -771,7 +779,7 @@ namespace SIPSorcery.Media
         /// <param name="rtpPacket">The RTP packet containing the video payload.</param>
         private void RenderVideo(RTPPacket rtpPacket)
         {
-            if (_currVideoFramePosn > 0 || (rtpPacket.Payload[0] & 0x10) > 0)
+            if ((rtpPacket.Payload[0] & 0x10) > 0)
             {
                 RtpVP8Header vp8Header = RtpVP8Header.GetVP8Header(rtpPacket.Payload);
                 Buffer.BlockCopy(rtpPacket.Payload, vp8Header.Length, _currVideoFrame, _currVideoFramePosn, rtpPacket.Payload.Length - vp8Header.Length);
@@ -837,35 +845,38 @@ namespace SIPSorcery.Media
         /// </summary>
         private void SendMusicSample(object state)
         {
-            int sampleSize = (SDPMediaFormatInfo.GetClockRate(SDPMediaFormatsEnum.PCMU) / 1000) * AUDIO_SAMPLE_PERIOD_MILLISECONDS;
-            byte[] sample = new byte[sampleSize];
-            int bytesRead = _audioStreamReader.BaseStream.Read(sample, 0, sample.Length);
-
-            if (bytesRead == 0 || _audioStreamReader.EndOfStream)
+            lock (_audioStreamReader)
             {
-                _audioStreamReader.BaseStream.Position = 0;
-                bytesRead = _audioStreamReader.BaseStream.Read(sample, 0, sample.Length);
-            }
+                int sampleSize = (SDPMediaFormatInfo.GetClockRate(_sendingAudioFormat.FormatCodec) / 1000) * AUDIO_SAMPLE_PERIOD_MILLISECONDS;
+                byte[] sample = new byte[sampleSize];
+                int bytesRead = _audioStreamReader.BaseStream.Read(sample, 0, sample.Length);
 
-            SendAudioFrame((uint)bytesRead, (int)SDPMediaFormatsEnum.PCMU, sample.Take(bytesRead).ToArray());
-
-            #region On hold audio scope.
-
-            if (OnHoldAudioScopeSampleReady != null)
-            {
-                Complex[] ieeeSamples = new Complex[sample.Length];
-
-                for (int index = 0; index < sample.Length; index++)
+                if (bytesRead == 0 || _audioStreamReader.EndOfStream)
                 {
-                    short pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
-                    byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
-                    ieeeSamples[index] = pcm / 32768f;
+                    _audioStreamReader.BaseStream.Position = 0;
+                    bytesRead = _audioStreamReader.BaseStream.Read(sample, 0, sample.Length);
                 }
 
-                OnHoldAudioScopeSampleReady(ieeeSamples.ToArray());
-            }
+                SendAudioFrame((uint)bytesRead, Convert.ToInt32(_sendingAudioFormat.FormatID), sample.Take(bytesRead).ToArray());
 
-            #endregion
+                #region On hold audio scope.
+
+                if (OnHoldAudioScopeSampleReady != null)
+                {
+                    Complex[] ieeeSamples = new Complex[sample.Length];
+
+                    for (int index = 0; index < sample.Length; index++)
+                    {
+                        short pcm = NAudio.Codecs.MuLawDecoder.MuLawToLinearSample(sample[index]);
+                        byte[] pcmSample = new byte[] { (byte)(pcm & 0xFF), (byte)(pcm >> 8) };
+                        ieeeSamples[index] = pcm / 32768f;
+                    }
+
+                    OnHoldAudioScopeSampleReady(ieeeSamples.ToArray());
+                }
+
+                #endregion
+            }
         }
 
         /// <summary>

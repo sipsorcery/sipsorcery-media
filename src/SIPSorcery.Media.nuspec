@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2012/06/nuspec.xsd">
   <metadata>
     <id>SIPSorceryMedia</id>
-    <version>4.0.60-pre</version>
+    <version>4.0.61-pre</version>
 	<title>SIPSorceryMedia</title>
     <authors>Aaron Clauson</authors>
     <owners>Aaron Clauson</owners>
@@ -45,7 +45,7 @@
 	    <dependency id="MathNet.Filtering" version="0.6.0" />
 		<dependency id="MathNet.Numerics" version="4.9.0" />
 		<dependency id="NAudio" version="1.10.0" />
-		<dependency id="SIPSorcery" version="4.0.60-pre" />
+		<dependency id="SIPSorcery" version="4.0.61-pre" />
 		<dependency id="System.Drawing.Common" version="4.7.0" />
 		<dependency id="System.Drawing.Primitives" version="4.3.0" />
 	</dependencies>
