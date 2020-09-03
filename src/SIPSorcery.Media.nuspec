@@ -11,7 +11,8 @@
     <projectUrl>https://github.com/sipsorcery/sipsorcery-media</projectUrl>
     <iconUrl>http://www.sipsorcery.com/mainsite/favicon.ico</iconUrl>
     <description>The SIPSorcery package for WebRTC plumbing and Windows audio and video capture.</description>
-	<releaseNotes>- v4.0.60-pre: Synchronised with SIPSorcery release.
+	<releaseNotes>- v4.0.61-pre: Synchronised with SIPSorcery release.
+- v4.0.60-pre: Synchronised with SIPSorcery release.
 - v4.0.59-pre: Synchronised with SIPSorcery release.
 - v4.0.58-pre: Synchronised with SIPSorcery release.
 - v4.0.55-pre: Added support for RtpIceChannel.
