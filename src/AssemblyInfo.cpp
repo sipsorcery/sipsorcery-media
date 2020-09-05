@@ -12,6 +12,6 @@ using namespace System::Security::Permissions;
 [assembly:AssemblyCopyrightAttribute(L"Copyright (c) Aaron Clauson 2019-2020")];
 [assembly:AssemblyTrademarkAttribute(L"")];
 [assembly:AssemblyCultureAttribute(L"")];
-[assembly:AssemblyVersionAttribute("4.0.61")];
+[assembly:AssemblyVersionAttribute("4.0.67")];
 [assembly:ComVisible(false)];
 [assembly:CLSCompliantAttribute(true)];
