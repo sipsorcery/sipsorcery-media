@@ -1,5 +1,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/u8nmgpkowce2q4fb/branch/master?svg=true)](https://ci.appveyor.com/project/sipsorcery/sipsorcery-9ql6k/branch/master)
 
+**Update: As of Sep 2020 this library has been replaced by a combination of new C# features in the main [SIPSorcery](https://github.com/sipsorcery/sipsorcery) library and Windows audio and video device access plus VP8 codec hooks in a new [SIPSorceryMedia.Windows](https://github.com/sipsorcery/SIPSorceryMedia.Windows) library. It is not envisaged that this library will continue to be updated or maintained.**
+
 This repository contains a companion .Net Core 3.1 compatible library to the [SIPSorcery SIP and WebRTC library](https://github.com/sipsorcery/sipsorcery). This library provides wrappers and integrations for a number of open source libraries and the functions to facilitate [WebRTC](https://www.w3.org/TR/webrtc/) communications:
 
  - [OpenSSL](https://www.openssl.org/) - the DTLS handshake to negotiate the SRTP keying material.
